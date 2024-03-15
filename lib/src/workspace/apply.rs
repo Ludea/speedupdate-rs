@@ -66,7 +66,7 @@ pub enum ApplyState {
 pub fn notify(mutex: &Mutex<(VecDeque<Item>, AtomicWaker)>, value: Item) {
     if let Ok(ref mut data) = mutex.lock() {
         let push = match (data.0.front_mut(), &value) {
-            (Some(&mut Ok(ref mut cur_pos)), &Ok(ref new_pos)) => {
+            (Some(&mut Ok(ref mut cur_pos)), Ok(new_pos)) => {
                 cur_pos.operation_idx = new_pos.operation_idx;
                 cur_pos.delta_input_bytes += new_pos.delta_input_bytes;
                 cur_pos.delta_output_bytes += new_pos.delta_output_bytes;
@@ -101,7 +101,7 @@ impl AvailableForApply {
     where
         F: Fn(&UpdatePosition) -> bool,
     {
-        let &(ref lock, ref cvar) = &*self.shared;
+        let (lock, cvar) = &*self.shared;
         let mut guard = lock.lock();
         loop {
             match guard {
@@ -111,7 +111,7 @@ impl AvailableForApply {
                         return Err(InternalApplyError::Cancelled);
                     }
                     if until(data) {
-                        return Ok(data.clone());
+                        return Ok(*data);
                     }
                     guard = cvar.wait(res);
                 }
@@ -129,16 +129,16 @@ pub struct ApplyStream {
 
 impl ApplyStream {
     pub(super) fn notify(&self, value: UpdatePosition) {
-        let &(ref lock, ref cvar) = &*self.i_available.shared;
+        let (lock, cvar) = &*self.i_available.shared;
         let mut started = lock.lock().unwrap();
-        (*started).1 = value;
+        (started).1 = value;
         cvar.notify_one();
     }
 
     pub fn cancel(&self) {
-        let &(ref lock, ref cvar) = &*self.i_available.shared;
+        let (lock, cvar) = &*self.i_available.shared;
         let mut started = lock.lock().unwrap();
-        (*started).0 = ApplyState::Cancel;
+        (started).0 = ApplyState::Cancel;
         cvar.notify_one();
     }
 }
@@ -190,7 +190,7 @@ pub(crate) fn apply_package(
     let t_applied = o_applied.clone();
     let t_available = i_available.clone();
     let package_name = package_name.to_string();
-    thread::spawn(move || -> () {
+    thread::spawn(move || {
         let terr_applied = t_applied.clone();
         let mut applied_data = UpdatePosition::new();
         let base_ctx = HandlerContext {

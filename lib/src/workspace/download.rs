@@ -34,7 +34,7 @@ where
                 }
             }
             if push {
-                ranges.push(Range { start: start, end: range.end });
+                ranges.push(Range { start, end: range.end });
             }
         }
     }
@@ -66,8 +66,8 @@ where
 {
     // 1. Compute the list of ranges to download in the requested package
     let ranges =
-        ranges(operations.iter().map(|&(_, ref o)| o.deref()), start_position.byte_idx, 500 * 1024);
-    let mut end_position = start_position.clone();
+        ranges(operations.iter().map(|(_, o)| o.deref()), start_position.byte_idx, 500 * 1024);
+    let mut end_position = start_position;
     if let Some(&(last_op_idx, _)) = operations.last() {
         end_position.operation_idx = last_op_idx + 1;
     }
@@ -103,7 +103,7 @@ where
 
     // 3. Write downloaded ranges chunks
     // -> TryStream< UpdatePosition >
-    let mut position = start_position.clone();
+    let mut position = start_position;
     let mut current_operation = None;
     let mut pos = 0;
     let write_ranges = download_ranges.and_then(move |(range_start, chunk)| {
@@ -153,7 +153,7 @@ where
                         {
                             let cur_len = cur_len as u64;
                             position.byte_idx += cur_len;
-                            pos += cur_len as u64;
+                            pos += cur_len;
                             delta_downloaded_bytes += cur_len;
                         }
                         remaining == cur_len
@@ -168,7 +168,7 @@ where
                 }
             }
             Ok(DownloadPackageProgression {
-                available: position.clone(),
+                available: position,
                 delta_downloaded_files,
                 delta_downloaded_bytes,
             })

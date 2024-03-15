@@ -104,7 +104,7 @@ pub mod tests {
 
         let mut options = fs_extra::dir::CopyOptions::new();
         options.content_only = true;
-        fs_extra::dir::copy(&data_path, &tmp_path, &options).unwrap();
+        fs_extra::dir::copy(data_path, &tmp_path, &options).unwrap();
 
         tmp_path
     }
@@ -117,7 +117,6 @@ pub mod tests {
     }
 
     pub fn data(name: &str) -> PathBuf {
-        let path = PathBuf::from("tests/data").join(name);
-        path
+        PathBuf::from("tests/data").join(name)
     }
 }

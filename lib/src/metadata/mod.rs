@@ -69,7 +69,7 @@ pub(crate) mod maybe_cleanname {
         S: Serializer,
     {
         let s = match value {
-            Some(value) => &*value,
+            Some(value) => value,
             None => "",
         };
         serializer.serialize_str(s)
@@ -80,7 +80,7 @@ pub(crate) mod maybe_cleanname {
         D: Deserializer<'de>,
     {
         let path = String::deserialize(deserializer)?;
-        if path.len() == 0 {
+        if path.is_empty() {
             Ok(None)
         } else {
             CleanName::new(path).map(Some).map_err(|path| {
@@ -112,7 +112,7 @@ pub(crate) mod u64_str {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        u64::from_str_radix(&*s, 10).map_err(|err| {
+        (s).parse::<u64>().map_err(|err| {
             serde::de::Error::invalid_value(
                 serde::de::Unexpected::Str(&s),
                 &err.to_string().as_str(),
@@ -255,7 +255,7 @@ impl CleanPath {
             path = path.replace('\\', "/");
         }
         let is_clean = path.split('/').all(|component| component != "." && component != "..");
-        if is_clean && path.len() > 0 {
+        if is_clean && !path.is_empty() {
             Ok(Self { path })
         } else {
             Err(path)
@@ -318,7 +318,7 @@ impl CleanName {
     }
     pub fn new(path: String) -> Result<Self, String> {
         if path.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'.')
-            && path.len() > 0
+            && !path.is_empty()
         {
             Ok(Self { name: path })
         } else {
@@ -358,7 +358,7 @@ impl Current {
 
     pub fn version(&self) -> &CleanName {
         match self {
-            &Current::V1 { ref current } => &current.revision,
+            Current::V1 { current } => &current.revision,
         }
     }
 }
@@ -378,16 +378,10 @@ impl Versions {
 
     pub fn iter(&self) -> impl Iterator<Item = &dyn Version> {
         match self {
-            &Versions::V1 { ref versions } => versions.iter().map(|v| {
+            Versions::V1 { versions } => versions.iter().map(|v| {
                 let v: &dyn Version = v;
                 v
             }),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        match self {
-            &Versions::V1 { ref versions } => versions.len(),
         }
     }
 }
@@ -406,7 +400,7 @@ impl Packages {
 
     pub fn iter(&self) -> impl Iterator<Item = &dyn Package> {
         match self {
-            &Packages::V1 { ref packages } => packages.iter().map(|p| {
+            Packages::V1 { packages } => packages.iter().map(|p| {
                 let p: &dyn Package = p;
                 p
             }),
@@ -415,13 +409,7 @@ impl Packages {
 
     pub(crate) fn as_slice(&self) -> &[v1::Package] {
         match self {
-            &Packages::V1 { ref packages } => &packages,
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        match self {
-            &Packages::V1 { ref packages } => packages.len(),
+            Packages::V1 { packages } => packages,
         }
     }
 }
@@ -436,27 +424,27 @@ pub enum PackageMetadata {
 impl Package for PackageMetadata {
     fn from(&self) -> Option<&CleanName> {
         match self {
-            &PackageMetadata::V1 { ref package, .. } => package.from(),
+            PackageMetadata::V1 { package, .. } => package.from(),
         }
     }
     fn to(&self) -> &CleanName {
         match self {
-            &PackageMetadata::V1 { ref package, .. } => package.to(),
+            PackageMetadata::V1 { package, .. } => package.to(),
         }
     }
     fn size(&self) -> u64 {
         match self {
-            &PackageMetadata::V1 { ref package, .. } => package.size(),
+            PackageMetadata::V1 { package, .. } => package.size(),
         }
     }
     fn package_data_name(&self) -> CleanName {
         match self {
-            &PackageMetadata::V1 { ref package, .. } => package.package_data_name(),
+            PackageMetadata::V1 { package, .. } => package.package_data_name(),
         }
     }
     fn package_metadata_name(&self) -> CleanName {
         match self {
-            &PackageMetadata::V1 { ref package, .. } => package.package_metadata_name(),
+            PackageMetadata::V1 { package, .. } => package.package_metadata_name(),
         }
     }
 }
@@ -464,7 +452,7 @@ impl Package for PackageMetadata {
 impl PackageMetadata {
     pub(crate) fn iter(&self) -> slice::Iter<v1::Operation> {
         match self {
-            &PackageMetadata::V1 { ref operations, .. } => operations.iter(),
+            PackageMetadata::V1 { operations, .. } => operations.iter(),
         }
     }
 }
@@ -528,7 +516,7 @@ where
                 }
                 from = to;
             }
-            assert!(path.len() > 0);
+            assert!(!path.is_empty());
             Some(ret)
         }
         None => None,
@@ -553,16 +541,16 @@ impl Operation for v1::Operation {
         }
     }
     fn data_size(&self) -> u64 {
-        match self {
-            &v1::Operation::Add(v1::Add { data_size, .. }) => data_size,
-            &v1::Operation::Patch(v1::Patch { data_size, .. }) => data_size,
+        match *self {
+            v1::Operation::Add(v1::Add { data_size, .. }) => data_size,
+            v1::Operation::Patch(v1::Patch { data_size, .. }) => data_size,
             _ => 0,
         }
     }
     fn final_size(&self) -> u64 {
-        match self {
-            &v1::Operation::Add(v1::Add { final_size, .. }) => final_size,
-            &v1::Operation::Patch(v1::Patch { final_size, .. }) => final_size,
+        match *self {
+            v1::Operation::Add(v1::Add { final_size, .. }) => final_size,
+            v1::Operation::Patch(v1::Patch { final_size, .. }) => final_size,
             _ => 0,
         }
     }
@@ -591,7 +579,7 @@ impl Operation for v1::Operation {
             | v1::Operation::Check(v1::Check { common, .. }) => &common.path,
             v1::Operation::MkDir { path, .. }
             | v1::Operation::RmDir { path, .. }
-            | v1::Operation::Rm(v1::Rm { path, .. }) => &path,
+            | v1::Operation::Rm(v1::Rm { path, .. }) => path,
         }
     }
 
@@ -634,7 +622,7 @@ pub enum WorkspaceChecks {
 impl WorkspaceChecks {
     pub(crate) fn iter(&self) -> slice::Iter<v1::Operation> {
         match self {
-            &WorkspaceChecks::V1 { ref operations, .. } => operations.iter(),
+            WorkspaceChecks::V1 { operations, .. } => operations.iter(),
         }
     }
 }

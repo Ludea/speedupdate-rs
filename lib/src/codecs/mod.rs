@@ -236,8 +236,8 @@ impl CoderOptions {
         self.get_size(&["maxsize"], u64::max_value())
     }
 
-    pub fn from_str(s: &str) -> io::Result<Self> {
-        let mut it = s.splitn(2, ":");
+    pub fn from_static_str(s: &str) -> io::Result<Self> {
+        let mut it = s.splitn(2, ':');
         let name = it
             .next()
             .ok_or_else(|| {
@@ -253,7 +253,7 @@ impl CoderOptions {
             .split(';')
             .filter(|o| !o.is_empty())
             .map(|o| {
-                let mut it = o.splitn(2, "=");
+                let mut it = o.splitn(2, '=');
                 let name = it
                     .next()
                     .ok_or_else(|| {
@@ -314,7 +314,7 @@ impl CoderOptions {
                         format!("bad option value, not a size: {}", value),
                     )
                 })?
-                .get_bytes()),
+                .as_u64()),
             None => Ok(default),
         }
     }
@@ -351,11 +351,13 @@ where
 {
     #[cfg(feature = "brotli")]
     if encoder_options.name() == "brotli" {
+        let mut params = ::brotli::enc::BrotliEncoderParams::default();
         let quality = encoder_options.get_u32_range(&["", "quality"], 6, 0..=11)?;
         let lgwin = encoder_options.get_u32_range(&["lgwin", "lg_window_size"], 20, 10..=30)?;
-        return Ok(BoxCoderDirect::boxed(brotli::BrotliEncoder::from_params(
-            output,
-            ::brotli::CompressParams::new().quality(quality).lgwin(lgwin),
+        params.quality = quality as i32;
+        params.lgwin = lgwin as i32;
+        return Ok(BoxCoderDirect::boxed(::brotli::enc::writer::CompressorWriter::with_params(
+            output, 4096, &params,
         )));
     }
 
@@ -405,7 +407,7 @@ where
 {
     #[cfg(feature = "brotli")]
     if decompressor_name == "brotli" {
-        return Ok(B::boxed(brotli::BrotliDecoder::new(output)));
+        return Ok(B::boxed(::brotli::DecompressorWriter::new(output, 4096)));
     }
 
     #[cfg(feature = "lzma")]

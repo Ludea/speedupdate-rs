@@ -1,0 +1,32 @@
+[package]
+name = "speedupdate"
+version = "0.10.0"
+authors = ["Vincent Rouillé <vincent@speedy37.fr>"]
+license = "MIT"
+edition = "2021"
+homepage = "https://github.com/speedy37/speedupdate-rs/"
+repository = "https://github.com/speedy37/speedupdate-rs/"
+description = """
+cli tool to manage repository (set current version, add version, ...)
+"""
+
+[dependencies]
+byte-unit = { version = "5.1.4", default-features = false }
+clap = { version = "4.0.27", features = ["cargo"] }
+console = "0.15.0"
+env_logger = "0.11"
+futures = "0.3"
+indicatif = "0.17.1"
+log = "0.4"
+parking_lot = "0.12.1"
+tokio = { version = "1.0", features = ["full"] }
+libspeedupdate = { path = "../lib" }
+env_filter = "0.1.0"
+
+[package.metadata.deb]
+depends = "liblzma5 (>= 5.1.1alpha+20120614)"
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/speedupdate", dest = "/usr/bin/speedupdate", mode = "755" },
+]

@@ -21,6 +21,7 @@ impl HttpsRepository {
     }
 
     fn get(&self, slice: &str) -> Result<reqwest::RequestBuilder, RepositoryError> {
+        println!("one more from http");
         let url = self
             .remote_url
             .join(slice)

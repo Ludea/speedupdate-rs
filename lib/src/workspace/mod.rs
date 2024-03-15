@@ -106,7 +106,7 @@ impl WorkspaceFileManager {
     }
 
     pub fn write_checks(&self, checks: &metadata::WorkspaceChecks) -> io::Result<()> {
-        io::atomic_write_json(&self.check_path(), &checks)
+        io::atomic_write_json(self.check_path(), &checks)
     }
 }
 
@@ -141,12 +141,13 @@ impl Workspace {
 
     /// Reload cached workspace state from filesystem
     pub fn reload_state_from_fs(&mut self) -> io::Result<()> {
-        let file = fs::File::open(self.file_manager.state_path()).map(|file| Some(file)).or_else(
-            |err| match err.kind() {
-                io::ErrorKind::NotFound => Ok(None),
-                _ => Err(err),
-            },
-        )?;
+        let file =
+            fs::File::open(self.file_manager.state_path()).map(Some).or_else(|err| {
+                match err.kind() {
+                    io::ErrorKind::NotFound => Ok(None),
+                    _ => Err(err),
+                }
+            })?;
         if let Some(file) = file {
             self.state = serde_json::from_reader(file)?;
         }
@@ -202,7 +203,7 @@ impl Workspace {
             .boxed_local()
     }
 
-    pub fn check<'a>(&'a mut self) -> GlobalCheckStream<'a> {
+    pub fn check<'a>(&'a mut self) -> GlobalCheckStream<'_> {
         self::check::check(self).try_flatten_stream().boxed_local()
     }
 }

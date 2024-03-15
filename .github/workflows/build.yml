@@ -1,0 +1,109 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:            
+  build-x86_64:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-12, ubuntu-22.04, windows-2022]
+            
+    runs-on: ${{ matrix.platform }}        
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set Github sha short (Linux and Macos) 
+        if: matrix.platform != 'windows-2022' 
+        run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
+      - name: Set Github sha short (Windows) 
+        if: matrix.platform == 'windows-2022' 
+        run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $env:GITHUB_ENV 
+    
+      - name: install deps
+        if: matrix.platform == 'ubuntu-22.04' 
+        run: sudo apt update && sudo apt install -y musl-dev musl-tools
+      - name: Install Protoc
+        uses: arduino/setup-protoc@master
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: 'Setup Rust on Windows and MacOS'
+        if: matrix.platform != 'ubuntu-22.04' 
+        uses: dtolnay/rust-toolchain@stable
+      - name: 'Setup Rust on Linux'
+        if: matrix.platform == 'ubuntu-22.04' 
+        uses: dtolnay/rust-toolchain@stable
+        with: 
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+#      - name: Clippy
+#        run: cargo clippy --all-targets --all-features -- -D warnings
+#      - name: Fmt
+#        run: cargo fmt --all -- --check
+      - name: Build Linux binaries
+        if: matrix.platform == 'ubuntu-22.04' 
+        run: cargo build --release --verbose --target x86_64-unknown-linux-musl
+      - name: Build Macos and Windows binaries
+        if: matrix.platform != 'Ubuntu-22.04'
+        run: cargo build --release --verbose 
+      - name: Move macOS bin
+        if: matrix.platform == 'macos-12'
+        run: |
+          mv target/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
+          mv target/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
+      - name: Move Windows bin
+        if: matrix.platform == 'windows-2022'
+        run: |
+          mv target/release/speedupdate.exe target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64.exe
+          mv target/release/speedupdateserver.exe target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64.exe
+      - name: Move x86_64 Linux binaries
+        if: matrix.platform == 'ubuntu-22.04' 
+        run: |
+          mv target/x86_64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
+          mv target/x86_64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform}}_x86_64
+          if-no-files-found: error
+          path: |
+            target/release/speedupdate-*
+            target/release/speedupdateserver-*
+          
+  build-aarch64-linux:
+    runs-on: ubuntu-22.04
+    container: 
+      image: messense/rust-musl-cross:aarch64-musl
+    #  options: --user 1001
+    steps:
+    - uses: actions/checkout@v4
+    - run: git config --global --add safe.directory /__w/speedupdate-rs/speedupdate-rs 
+    - name: Set outputs
+      run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
+    - name: Install Protoc
+      uses: arduino/setup-protoc@master
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+#      - name: Clippy
+#        run: cargo clippy --all-targets --all-features -- -D warnings
+#      - name: Fmt
+#        run: cargo fmt --all -- --check
+    - name: Build and move aarch64 Linux binaries
+      run: |
+        cargo build --release --verbose
+        mv target/aarch64-unknown-linux-musl/release/speedupdate target/aarch64-unknown-linux-musl/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_aarch64
+        mv target/aarch64-unknown-linux-musl/release/speedupdateserver target/aarch64-unknown-linux-musl/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_aarch64
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_ubuntu-22.04_aarch64
+        if-no-files-found: error
+        path: |
+          target/aarch64-unknown-linux-musl/release/speedupdate-*
+          target/aarch64-unknown-linux-musl/release/speedupdateserver-*

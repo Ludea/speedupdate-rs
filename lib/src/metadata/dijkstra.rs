@@ -70,7 +70,7 @@ pub fn shortest_path(adj_list: &Vec<Vec<Edge>>, start: usize, goal: usize) -> Op
                 p = prev;
             }
             path.reverse();
-            assert!(path.len() > 0);
+            assert!(!path.is_empty());
             return Some(path);
         }
 

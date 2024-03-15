@@ -1,16 +1,16 @@
 //! Progression reporting helpers
-use std::cell::{Ref, RefCell, RefMut};
-use std::fmt;
-use std::ops::{Add, AddAssign, Div, Sub, SubAssign};
-use std::rc::Rc;
-use std::sync::Arc;
-
 use super::updater::UpdateFilter;
 use super::UpdatePosition;
 use crate::histogram::Histogram;
 use crate::io;
 use crate::metadata::v1::StateUpdating;
 use crate::metadata::{self, CleanName, CleanPath, Operation};
+use std::cell::{Ref, RefCell, RefMut};
+use std::fmt;
+use std::ops::{Add, AddAssign, Div, Sub, SubAssign};
+use std::rc::Rc;
+use std::sync::{Arc, Mutex, MutexGuard};
+//use tokio::sync::{Mutex, MutexGuard};
 
 #[derive(Clone)]
 pub struct SharedCheckProgress {
@@ -119,44 +119,35 @@ impl CheckProgress {
     }
 
     pub fn current_operation(&self) -> Option<&dyn Operation> {
-        let op = self.metadata.iter().skip(self.checking_operation_idx).next()?;
+        let op = self.metadata.iter().nth(self.checking_operation_idx)?;
         Some(op)
     }
 }
 
 #[derive(Clone)]
 pub struct SharedUpdateProgress {
-    state: Rc<RefCell<UpdateProgress>>,
+    state: Arc<Mutex<UpdateProgress>>,
 }
 
 impl SharedUpdateProgress {
     pub fn new(target_revision: CleanName) -> Self {
-        Self { state: Rc::new(RefCell::new(UpdateProgress::new(target_revision))) }
+        Self { state: Arc::new(Mutex::new(UpdateProgress::new(target_revision))) }
     }
 
-    pub fn borrow(&self) -> Ref<'_, UpdateProgress> {
-        self.state.borrow()
-    }
-
-    pub(crate) fn borrow_mut(&self) -> RefMut<'_, UpdateProgress> {
-        self.state.borrow_mut()
+    pub fn lock(&self) -> MutexGuard<'_, UpdateProgress> {
+        self.state.lock().unwrap()
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum UpdateStage {
+    #[default]
     FindingUpdatePath,
     Updating,
     FindingRepairPath,
     Repairing,
     Uptodate,
     Failed,
-}
-
-impl Default for UpdateStage {
-    fn default() -> Self {
-        UpdateStage::FindingUpdatePath
-    }
 }
 
 pub struct UpdateFailure {
@@ -232,7 +223,7 @@ impl UpdateProgress {
 
     pub fn current_step_operation(&self, operation_idx: usize) -> Option<&dyn Operation> {
         let step = self.current_step()?;
-        let op = step.metadata.iter().skip(operation_idx).next()?;
+        let op = step.metadata.iter().nth(operation_idx)?;
         Some(op)
     }
 
@@ -255,8 +246,8 @@ impl UpdateProgress {
         filter: &UpdateFilter,
     ) {
         let (mut available, mut applied, check_only) = (
-            first_package_state.available.clone(),
-            first_package_state.applied.clone(),
+            first_package_state.available,
+            first_package_state.applied,
             first_package_state.check_only,
         );
         for package_metadata in packages_metadata.iter() {

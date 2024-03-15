@@ -22,7 +22,7 @@ pub struct HandlerContext<'a> {
 
 impl<'a> HandlerContext<'a> {
     pub fn final_path(&self, path: &metadata::CleanPath) -> PathBuf {
-        self.file_manager.dir().join(&path)
+        self.file_manager.dir().join(path)
     }
 
     pub fn tmp_operation_path(&self) -> PathBuf {

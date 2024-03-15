@@ -74,11 +74,13 @@ impl Repository {
                 .find(|v| &v.revision == version)
                 .map(|v| metadata::Current::V1 { current: v }),
         }
-        .ok_or(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("version {} doesn't exists", version),
-        ))?;
-        io::atomic_write_json(&self.dir.join(metadata::Current::filename()), &version)?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("version {} doesn't exists", version),
+            )
+        })?;
+        io::atomic_write_json(self.dir.join(metadata::Current::filename()), &version)?;
         Ok(())
     }
 
@@ -102,7 +104,7 @@ impl Repository {
                 .collect(),
         };
         let versions = Versions::V1 { versions };
-        io::atomic_write_json(&self.dir.join(metadata::Versions::filename()), &versions)?;
+        io::atomic_write_json(self.dir.join(metadata::Versions::filename()), &versions)?;
         Ok(())
     }
 
@@ -116,7 +118,7 @@ impl Repository {
             }
         };
         let versions = Versions::V1 { versions };
-        io::atomic_write_json(&self.dir.join(metadata::Versions::filename()), &versions)?;
+        io::atomic_write_json(self.dir.join(metadata::Versions::filename()), &versions)?;
         Ok(())
     }
 
@@ -145,7 +147,7 @@ impl Repository {
                 .collect(),
         };
         let packages = Packages::V1 { packages };
-        io::atomic_write_json(&self.dir.join(metadata::Versions::filename()), &packages)?;
+        io::atomic_write_json(self.dir.join(metadata::Packages::filename()), &packages)?;
         Ok(())
     }
 
@@ -159,7 +161,7 @@ impl Repository {
             }
         };
         let packages = Packages::V1 { packages };
-        io::atomic_write_json(&self.dir.join(metadata::Versions::filename()), &packages)?;
+        io::atomic_write_json(self.dir.join(metadata::Packages::filename()), &packages)?;
         Ok(())
     }
 }
@@ -169,7 +171,7 @@ where
     T: Serialize,
 {
     if fs::metadata(path).is_err() {
-        let file = fs::File::create(&path)?;
+        let file = fs::File::create(path)?;
         serde_json::to_writer_pretty(file, value)?;
     }
     Ok(())

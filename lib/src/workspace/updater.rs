@@ -100,7 +100,7 @@ impl<'a> UpdatePackageStream<'a> {
     {
         let (available, applied) = {
             let state = &*state.borrow();
-            (state.available.clone(), state.applied.clone())
+            (state.available, state.applied)
         };
         let download_operations: Vec<(usize, _)> = operations
             .iter()
@@ -121,14 +121,14 @@ impl<'a> UpdatePackageStream<'a> {
             file_manager.clone(),
             package_name,
             apply_operations,
-            i_available.clone(),
+            i_available,
         );
         let download_stream = download_package(
             file_manager,
             repository,
             package_name,
             download_operations,
-            available.clone(),
+            available,
         );
 
         Ok(UpdatePackageStream { state, shared_state, download_stream, apply_stream })
@@ -159,9 +159,9 @@ impl<'a> Stream for UpdatePackageStream<'a> {
             (download_poll, apply_poll) => {
                 let mut delta = Progression::default();
                 if let Poll::Ready(Some(Ok(download_progress))) = download_poll {
-                    this.state.borrow_mut().available = download_progress.available.clone();
+                    this.state.borrow_mut().available = download_progress.available;
 
-                    let mut state = this.shared_state.borrow_mut();
+                    let mut state = this.shared_state.lock();
                     state.downloading_operation_idx = download_progress.available.operation_idx;
                     delta.downloaded_files = download_progress.delta_downloaded_files;
                     delta.downloaded_bytes = download_progress.delta_downloaded_bytes;
@@ -172,7 +172,7 @@ impl<'a> Stream for UpdatePackageStream<'a> {
                         Ok(apply_progress) => {
                             this.state.borrow_mut().applied.operation_idx =
                                 apply_progress.operation_idx;
-                            let mut state = this.shared_state.borrow_mut();
+                            let mut state = this.shared_state.lock();
                             state.applying_operation_idx = apply_progress.operation_idx;
                             delta.applied_files = apply_progress.delta_applied_files;
                             delta.applied_input_bytes = apply_progress.delta_input_bytes;
@@ -195,7 +195,7 @@ impl<'a> Stream for UpdatePackageStream<'a> {
                 }
 
                 {
-                    let mut state = this.shared_state.borrow_mut();
+                    let mut state = this.shared_state.lock();
                     state.inc_progress(delta);
                 }
 
@@ -253,7 +253,7 @@ where
     R: RemoteRepository,
 {
     let goal_version = if let Some(goal_version) = goal_version {
-        goal_version.to_owned()
+        goal_version
     } else {
         let current_version = repository.current_version().map_err(UpdateError::Repository).await?;
         current_version.version().clone()
@@ -304,13 +304,14 @@ where
     let update_options_r = update_options.clone();
     let update_options_s = update_options.clone();
 
-    let write_state_nr = Rc::new(RefCell::new(move || -> Result<(), UpdateError> {
+    let write_state_nr = Rc::new(RefCell::new(move || {
+        //-> Result<(), UpdateError> {
         let state = &*shared_state_s.borrow();
         if state.check_only {
             return Ok(());
         }
-        let global_progression = &*global_progression_nr.borrow();
-        let state = if state.failures.len() == 0
+        let global_progression = global_progression_nr.lock();
+        let state = if state.failures.is_empty()
             && global_progression.applying_package_idx == global_progression.steps.len()
         {
             State::Stable { version: state.to.clone() }
@@ -343,9 +344,9 @@ where
             state.previous_failures = mem::take(&mut state.failures);
             state.previous_failures.clone()
         };
-        if failures.len() > 0 {
+        if !failures.is_empty() {
             failures.sort();
-            global_progression_r.borrow_mut().stage = UpdateStage::FindingRepairPath;
+            global_progression_r.lock().stage = UpdateStage::FindingRepairPath;
             Either::Left(
                 update_internal(
                     update_options_r,
@@ -368,20 +369,20 @@ where
     .flatten_stream();
 
     let commit_stream = future::lazy(move |_| {
-        if let Err(err) = (&mut *write_state_c.borrow_mut())() {
+        if let Err(err) = (*write_state_c.borrow_mut())() {
             // Failed to write state
             return Either::Right(stream::once(async { Err(err) }));
         }
 
         let state = &mut *shared_state_c.borrow_mut();
         state.previous_failures = Vec::new();
-        let last_res = if state.failures.len() == 0 {
+        let last_res = if state.failures.is_empty() {
             info!("update to {} succeeded", goal_version);
-            global_progression_c.borrow_mut().stage = UpdateStage::Uptodate;
+            global_progression_c.lock().stage = UpdateStage::Uptodate;
             Ok(global_progression_c.clone())
         } else {
             error!("update to {} failed", goal_version);
-            global_progression_c.borrow_mut().stage = UpdateStage::Failed;
+            global_progression_c.lock().stage = UpdateStage::Failed;
             let err = UpdateError::Failed { files: state.failures.len() };
             Err(err)
         };
@@ -395,7 +396,7 @@ where
         .inspect(move |_| {
             let now = Instant::now();
             if now.duration_since(last_write) > update_options_s.save_state_interval {
-                let _ignore_err = (&mut *write_state_nr.borrow_mut())();
+                let _ignore_err = (*write_state_nr.borrow_mut())();
                 last_write = now;
             }
         })
@@ -455,11 +456,7 @@ where
     let packages_metadata = match maybe_path {
         Some((packages_metadata, first_package_state)) => {
             // Update global progress with objectives
-            global_progression.borrow_mut().push_steps(
-                &packages_metadata,
-                &first_package_state,
-                &filter,
-            );
+            global_progression.lock().push_steps(&packages_metadata, &first_package_state, &filter);
 
             // Setup shared workspace state
             shared_state.borrow_mut().update_with(first_package_state);
@@ -470,7 +467,7 @@ where
     };
 
     {
-        global_progression.borrow_mut().stage = main_stage;
+        global_progression.lock().stage = main_stage;
     }
 
     let state_p = shared_state.clone();
@@ -532,10 +529,10 @@ where
         let global_progression_c = global_progression.clone();
         let commit_stream = future::lazy(move |_| {
             debug!("end update package");
-            let mut state = &mut *state_c.borrow_mut();
+            let state = &mut *state_c.borrow_mut();
             state.available = UpdatePosition::new();
             state.applied = UpdatePosition::new();
-            global_progression_c.borrow_mut().inc_package();
+            global_progression_c.lock().inc_package();
             stream::empty()
         })
         .flatten_stream();
@@ -576,12 +573,12 @@ where
         }
     };
     if start.as_ref() != Some(goal_version) {
-        match metadata::shortest_path(start.as_ref(), goal_version, &packages) {
+        match metadata::shortest_path(start.as_ref(), goal_version, packages) {
             Some(ref mut npath) => path.append(npath),
             _ => return Err(UpdateError::NoPath),
         }
     }
-    if path.len() > 0 {
+    if !path.is_empty() {
         let p0 = path[0];
         let from = p0.from().cloned();
         let to = p0.to().clone();

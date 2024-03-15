@@ -97,12 +97,12 @@ impl AutoRepository {
             return Ok(AutoRepository::Https(https::HttpsRepository::new(remote_url)?));
         }
 
-        if repository_url.starts_with("file://") {
-            let dir = (&repository_url["file://".len()..]).into();
+        if let Some(repo_url) = repository_url.strip_prefix("file://") {
+            let dir = repo_url.into();
             return Ok(AutoRepository::File(file::FileRepository::new(dir)));
         }
 
-        Err(RepositoryError::InvalidUrl { reason: format!("unsupported scheme") })
+        Err(RepositoryError::InvalidUrl { reason: "unsupported scheme".to_string() })
     }
 }
 

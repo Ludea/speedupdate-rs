@@ -1,0 +1,198 @@
+name: Release
+
+on: 
+ push:
+   tags:
+     - v*.*.*
+
+env:
+  REGISTRY: ghcr.io
+jobs:
+  build-x86_64-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install deps
+      run: sudo apt update && sudo apt install -y protobuf-compiler musl-tools musl-dev 
+    - name: Setup rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        target: x86_64-unknown-linux-musl
+    - name: Install cargo-deb 
+      run: cargo install cargo-deb 
+    - name: Install cargo-generate-rpm
+      run: cargo install cargo-generate-rpm 
+    - name: Install cargo-aur
+      run: cargo install cargo-aur
+    - name: build x86_64 bin
+      run: cargo build --release --verbose --target x86_64-unknown-linux-musl
+    - name: Create deb
+      run: |
+        cargo deb -p speedupdate --target x86_64-unknown-linux-musl --no-build
+        cargo deb -p speedupdateserver --target x86_64-unknown-linux-musl --no-build
+    - name: Create rpm
+      run: |
+        cp target/x86_64-unknown-linux-musl/release/speedupdate target/release/speedupdate 
+        cargo generate-rpm -p cli --target x86_64-unknown-linux-musl
+        cargo generate-rpm -p server --target x86_64-unknown-linux-musl
+#    - name: Create PKG
+#      run: cd cli && cargo aur
+    - name: Rename bin
+      run: |
+        mv target/x86_64-unknown-linux-musl/release/speedupdate target/x86_64-unknown-linux-musl/release/speedupdate-${{ github.ref_name }}_linux_x86_64 
+        mv target/x86_64-unknown-linux-musl/release/speedupdateserver target/x86_64-unknown-linux-musl/release/speedupdateserver-${{ github.ref_name }}_linux_x86_64 
+    - name: Upload file 
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          target/x86_64-unknown-linux-musl/release/speedupdate-${{ github.ref_name }}_linux_x86_64
+          target/x86_64-unknown-linux-musl/release/speedupdateserver-${{ github.ref_name }}_linux_x86_64
+          target/x86_64-unknown-linux-musl/debian/*.deb
+          target/x86_64-unknown-linux-musl/generate-rpm/*.rpm
+    - name: Upload speedupdate deb to Cloudsmith
+      uses: cloudsmith-io/action@master
+      with:
+        api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+        command: "push"
+        format: "deb"
+        republish: "true"
+        owner: "ludea"
+        repo: "speedupdate"
+        distro: "ubuntu"
+        release: "xenial"
+        file: "target/x86_64-unknown-linux-musl/debian/speedupdate_*.deb"
+    - name: Upload speedupdateserver deb to Cloudsmith
+      uses: cloudsmith-io/action@master
+      with:
+        api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+        command: "push"
+        format: "deb"
+        republish: "true"
+        owner: "ludea"
+        repo: "speedupdate"
+        distro: "ubuntu"
+        release: "xenial"
+        file: "target/x86_64-unknown-linux-musl/debian/speedupdateserver*.deb" 
+    - name: Upload speedupdate rpm to Cloudsmith
+      uses: cloudsmith-io/action@master
+      with:
+        api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+        command: "push"
+        format: "rpm"
+        republish: "true"
+        owner: "ludea"
+        repo: "speedupdate"
+        distro: "fedora"
+        release: "37"
+        version: "37"
+        file: "target/x86_64-unknown-linux-musl/generate-rpm/speedupdate-*.rpm" 
+    - name: Upload speedupdateserver rpm to Cloudsmith
+      uses: cloudsmith-io/action@master
+      with:
+        api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
+        command: "push"
+        format: "rpm"
+        republish: "true"
+        owner: "ludea"
+        repo: "speedupdate"
+        distro: "fedora"
+        release: "37"
+        version: "37"
+        file: "target/x86_64-unknown-linux-musl/generate-rpm/speedupdateserver*.rpm" 
+
+  build-aarch64-linux:
+    runs-on: ubuntu-22.04
+    container: 
+      image: messense/rust-musl-cross:aarch64-musl
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install deps
+      run: sudo apt update && sudo apt install -y protobuf-compiler zstd
+    - name: Install cargo deb
+      run: cargo install cargo-deb
+    - name: Build binary
+      run: cargo build --release --verbose
+#    - name: Create deb
+ #     run: |
+ #       cargo deb -p speedupdate --target aarch64-unknown-linux-musl --no-build
+ #       cargo deb -p speedupdateserver --target aarch64-unknown-linux-musl --no-build
+    - name: Rename artifacts
+      run: |
+        mv target/aarch64-unknown-linux-musl/release/speedupdate target/aarch64-unknown-linux-musl/release/speedupdate-${{ github.ref_name }}_linux_aarch64
+        mv target/aarch64-unknown-linux-musl/release/speedupdateserver target/aarch64-unknown-linux-musl/release/speedupdateserver-${{ github.ref_name }}_linux_aarch64
+    - name: Upload file 
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          target/aarch64-unknown-linux-musl/release/speedupdate-${{ github.ref_name }}_linux_aarch64
+          target/aarch64-unknown-linux-musl/release/speedupdateserver-${{ github.ref_name }}_linux_aarch64
+ #         target/aarch64-unknown-linux-musl/debian/*.deb
+
+  build-images:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+    - name: Get version
+      id: version
+      uses: mikefarah/yq@v4.42.1
+      with:
+        cmd: yq '.package.version' server/Cargo.toml
+    - name: Build container 
+      uses: docker/build-push-action@v5
+      with:
+        push: true
+        tags: |
+          ludea/speedupdate:${{ steps.version.outputs.result }}
+          ludea/speedupdate:latest
+        target: final
+        platforms: linux/amd64, linux/arm64         
+
+  build-windows:
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v4
+    - name: install deps
+      run: choco install protoc -y 
+    - name: Build Binaries
+      run: |
+        cargo build --verbose --release
+        mv target/release/speedupdate.exe target/release/speedupdate-${{ github.ref_name }}_x86_64.exe
+        mv target/release/speedupdateserver.exe target/release/speedupdateserver-${{ github.ref_name }}_x86_64.exe
+    - name: Upload file 
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          target/release/speedupdate-${{ github.ref_name }}_x86_64.exe
+          target/release/speedupdateserver-${{ github.ref_name }}_x86_64.exe
+      
+  build-macOS:
+    runs-on: macos-12
+    steps:
+    - uses: actions/checkout@v4
+    - name: install deps
+      run: brew install protobuf
+    - name: Build Binaries
+      run: |
+        cargo build --verbose --release
+        mv target/release/speedupdate target/release/speedupdate-${{ github.ref_name }}_darwin_x86_64
+        mv target/release/speedupdateserver target/release/speedupdateserver-${{ github.ref_name }}_darwin_x86_64
+    - name: Upload file 
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          target/release/speedupdate-cli-${{ github.ref_name }}_darwin_x86_64
+          target/release/speedupdateserver-${{ github.ref_name }}_darwin_x86_64
+    

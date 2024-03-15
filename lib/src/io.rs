@@ -24,7 +24,7 @@ pub trait ReadSlice {
 /// Default ReadSlice implementation for any implementors of both `Read` and `Seek`
 impl<T: Read + Seek> ReadSlice for T {
     fn read_slice(&mut self, pos: SeekFrom, buf: &mut [u8]) -> Result<()> {
-        let current = self.seek(SeekFrom::Current(0))?;
+        let current = self.stream_position()?;
         self.seek(pos)?;
         self.read_exact(buf)?;
         self.seek(SeekFrom::Start(current))?;

@@ -72,7 +72,7 @@ impl<'a> super::ApplyHandler for Handler<'a> {
         }
 
         let path = self.ctx.final_path(&op.common.path);
-        let file = fs::OpenOptions::new().read(true).open(&path)?;
+        let file = fs::OpenOptions::new().read(true).open(path)?;
         let size = file.metadata()?.len();
         io::assert_eq(size, op.local_size, "local size")?;
         io::set_exe_permission(&file, op.common.exe)?;

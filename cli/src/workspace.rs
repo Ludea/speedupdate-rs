@@ -1,173 +1,18 @@
-use std::io::Write;
+use crate::LOGGER;
+use clap::ArgMatches;
+use console::{style, Term};
+use futures::prelude::*;
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
+use libspeedupdate::link::{AutoRepository, RemoteRepository};
+use libspeedupdate::metadata::{self, v1::State, CleanName, Operation};
+use libspeedupdate::workspace::{UpdateOptions, Workspace};
+use log::error;
 use std::ops::Deref;
 use std::path::Path;
-use std::{io, process};
+use std::process;
 
-use clap::{clap_app, crate_authors, crate_description, crate_name, crate_version, ArgMatches};
-use console::{style, Color, Term};
-use futures::prelude::*;
-use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle, WeakProgressBar};
-use log::{error, warn};
-use parking_lot::RwLock;
-use speedupdate::link::{AutoRepository, RemoteRepository};
-use speedupdate::metadata::{self, v1::State, CleanName, Operation};
-use speedupdate::workspace::{UpdateOptions, Workspace};
-
-struct Logger {
-    pb: RwLock<Option<WeakProgressBar>>,
-    filter: RwLock<Option<env_logger::filter::Filter>>,
-}
-
-impl Logger {
-    const fn new() -> Self {
-        Self { pb: parking_lot::const_rwlock(None), filter: parking_lot::const_rwlock(None) }
-    }
-
-    fn init(&self) {
-        let filter = env_logger::filter::Builder::from_env("RUST_LOG").build();
-        log::set_max_level(filter.filter());
-        *self.filter.write() = Some(filter);
-    }
-
-    fn set_progress_bar(&self, pb: Option<WeakProgressBar>) {
-        let mut pb_guard = self.pb.write();
-        *pb_guard = pb;
-    }
-
-    fn matches(&self, record: &log::Record) -> bool {
-        match &*self.filter.read() {
-            Some(filter) => filter.matches(record),
-            None => record.level() <= log::max_level(),
-        }
-    }
-}
-
-impl log::Log for Logger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
-        match &*self.filter.read() {
-            Some(filter) => filter.enabled(metadata),
-            None => metadata.level() <= log::max_level(),
-        }
-    }
-
-    fn log(&self, record: &log::Record) {
-        if !self.matches(record) {
-            return;
-        }
-
-        let level = match record.level() {
-            log::Level::Error => style("  ERROR  ").bg(Color::Red).black(),
-            log::Level::Warn => style("  WARN   ").bg(Color::Red).black(),
-            log::Level::Info => style("  INFO   ").bg(Color::Cyan).black(),
-            log::Level::Debug => style("  DEBUG  ").bg(Color::Yellow).black(),
-            log::Level::Trace => style("  TRACE  ").bg(Color::Magenta).black(),
-        };
-        let msg =
-            format!("{} {}: {}", level, record.module_path().unwrap_or_default(), record.args());
-
-        let pb = self.pb.read();
-        let pb = pb.as_ref().and_then(|weak| weak.upgrade());
-        match pb {
-            Some(pb) => {
-                pb.println(msg);
-            }
-            None => {
-                writeln!(io::stderr(), "{}", msg).ok();
-            }
-        }
-    }
-
-    fn flush(&self) {
-        io::stderr().flush().ok();
-    }
-}
-
-static LOGGER: Logger = Logger::new();
-
-#[tokio::main]
-async fn main() {
-    LOGGER.init();
-    let _ = log::set_logger(&LOGGER);
-
-    let matches = clap_app!((crate_name!()) =>
-        (setting: clap::AppSettings::SubcommandRequiredElseHelp)
-        (setting: clap::AppSettings::VersionlessSubcommands)
-        (setting: clap::AppSettings::DisableHelpSubcommand)
-        (version: crate_version!())
-        (author: crate_authors!("\n"))
-        (about: crate_description!())
-        (@arg workspace: -w --workspace +takes_value "Workspace directory")
-        (@arg debug: -d +takes_value
-            possible_value("warn")
-            possible_value("info")
-            possible_value("debug")
-            possible_value("trace")
-            default_value("info")
-            "Sets the level of debugging information\n"
-        )
-        (@subcommand status =>
-            (about: "Show the workspace status")
-            (@arg repository: "Repository URL")
-        )
-        (@subcommand update =>
-            (about: "Update workspace")
-            (@arg repository: +required "Repository URL")
-            (@arg to: --to +takes_value "Target revision")
-            (@arg check: --check "Integrity check of all files, not just affected ones")
-            (@arg no_progress: --("no-progress") "Disable progress bars")
-        )
-        (@subcommand check =>
-            (about: "Check workspace integrity")
-        )
-        (@subcommand log =>
-            (about: "Show changelog")
-            (@arg repository: +required "Repository URL")
-            (@arg from: --from +takes_value "From revision")
-            (@arg to: --to +takes_value "Up to revision")
-            (@arg latest: --latest +takes_value "Use repository latest revision")
-            (@arg oneline: --oneline "Show one revision per line")
-        )
-    )
-    .get_matches();
-
-    match matches.value_of("debug") {
-        Some("warn") => log::set_max_level(log::LevelFilter::Warn),
-        Some("info") => log::set_max_level(log::LevelFilter::Info),
-        Some("debug") => log::set_max_level(log::LevelFilter::Debug),
-        Some("trace") => log::set_max_level(log::LevelFilter::Trace),
-        Some(lvl) => {
-            warn!("invalid debug level '{}', ignoring...", lvl);
-        }
-        None => log::set_max_level(log::LevelFilter::Info),
-    };
-
-    let workspace_path = match matches.value_of("workspace") {
-        Some(path) => path.to_string(),
-        None => std::env::current_dir().unwrap().display().to_string(),
-    };
-    println!("workspace: {}", workspace_path);
-    let mut workspace = match Workspace::open(&Path::new(&workspace_path)) {
-        Ok(workspace) => workspace,
-        Err(err) => {
-            error!("unable to load workspace state: {}", err);
-            process::exit(1)
-        }
-    };
-
-    match matches.subcommand() {
-        ("status", Some(matches)) => do_status(matches, &mut workspace).await,
-        ("log", Some(matches)) => do_log(matches, &mut workspace).await,
-        ("check", Some(matches)) => do_check(matches, &mut workspace).await,
-        ("update", Some(matches)) => {
-            let repository = arg_repository(matches).unwrap();
-            do_update(matches, &mut workspace, &repository).await
-        }
-        _ => unreachable!(),
-    };
-}
-
-fn arg_repository(matches: &ArgMatches<'_>) -> Option<AutoRepository> {
-    match matches.value_of("repository") {
+pub fn arg_repository(matches: &ArgMatches) -> Option<AutoRepository> {
+    match matches.get_one::<String>("repository") {
         Some(url) => {
             println!("repository: {}", url);
             match AutoRepository::new(url, None) {
@@ -198,7 +43,7 @@ async fn current_version(repository: &impl RemoteRepository) -> metadata::Curren
     }
 }
 
-async fn do_status(matches: &ArgMatches<'_>, workspace: &mut Workspace) {
+pub async fn do_status(matches: &ArgMatches, workspace: &mut Workspace) {
     let repository = arg_repository(matches);
     let current_version = match repository {
         Some(repository) => try_current_version(&repository).await,
@@ -271,12 +116,12 @@ async fn do_status(matches: &ArgMatches<'_>, workspace: &mut Workspace) {
     }
 }
 
-async fn do_update(
-    matches: &ArgMatches<'_>,
+pub async fn do_update(
+    matches: &ArgMatches,
     workspace: &mut Workspace,
     repository: &impl RemoteRepository,
 ) {
-    let goal_version = match matches.value_of("to") {
+    let goal_version = match matches.get_one::<&str>("to") {
         Some(to) => match CleanName::new(to.to_string()) {
             Ok(rev) => Some(rev),
             Err(_) => {
@@ -287,7 +132,7 @@ async fn do_update(
         None => None,
     };
     let mut update_options = UpdateOptions::default();
-    update_options.check = matches.is_present("check");
+    update_options.check = matches.get_flag("check");
     let mut stream = workspace.update(repository, goal_version, update_options);
 
     let state = match stream.next().await {
@@ -302,12 +147,12 @@ async fn do_update(
         }
     };
 
-    let state = state.borrow();
+    let state = state.lock();
     let progress = state.histogram.progress();
 
     println!("Target revision: {}", state.target_revision);
 
-    let res = if matches.is_present("no_progress") {
+    let res = if matches.get_flag("no_progress") {
         drop(state); // drop the Ref<_>
 
         stream.try_for_each(|_state| future::ready(Ok(()))).await
@@ -323,17 +168,17 @@ async fn do_update(
         let sty = ProgressStyle::default_bar().progress_chars("##-");
 
         let dl_bytes = m.add(ProgressBar::new(state.download_bytes));
-        dl_bytes.set_style(sty.clone().template(DL_TPL));
+        dl_bytes.set_style(sty.clone().template(DL_TPL).unwrap());
         dl_bytes.set_position(progress.downloaded_bytes);
         dl_bytes.reset_eta();
 
         let apply_input_bytes = m.add(ProgressBar::new(state.apply_input_bytes));
-        apply_input_bytes.set_style(sty.clone().template(IN_TPL));
+        apply_input_bytes.set_style(sty.clone().template(IN_TPL).unwrap());
         apply_input_bytes.set_position(progress.applied_input_bytes);
         apply_input_bytes.reset_eta();
 
         let apply_output_bytes = m.add(ProgressBar::new(state.apply_output_bytes));
-        apply_output_bytes.set_style(sty.clone().template(OU_TPL));
+        apply_output_bytes.set_style(sty.clone().template(OU_TPL).unwrap());
         apply_output_bytes.set_position(progress.applied_output_bytes);
         apply_output_bytes.reset_eta();
 
@@ -341,11 +186,9 @@ async fn do_update(
 
         drop(state); // drop the Ref<_>
 
-        let mp = tokio::task::spawn_blocking(move || m.join());
-
         let res = stream
             .try_for_each(|state| {
-                let state = state.borrow();
+                let state = state.lock();
                 let progress = state.histogram.progress();
                 dl_bytes.set_position(progress.downloaded_bytes);
                 dl_bytes.set_length(state.download_bytes);
@@ -370,7 +213,6 @@ async fn do_update(
         dl_bytes.finish();
         apply_input_bytes.finish();
         apply_output_bytes.finish();
-        let _ = mp.await;
 
         res
     };
@@ -389,10 +231,10 @@ fn op_file_name(op: Option<&dyn Operation>) -> String {
         .into_owned()
 }
 
-async fn do_log(matches: &ArgMatches<'_>, workspace: &mut Workspace) {
+pub async fn do_log(matches: &ArgMatches, workspace: &mut Workspace) {
     let repository = arg_repository(matches).unwrap();
-    let from = matches.value_of("from");
-    let to = match (matches.value_of("to"), matches.is_present("latest")) {
+    let from: Option<&std::string::String> = matches.get_one::<String>("from");
+    let to = match (matches.get_one::<String>("to"), matches.get_flag("latest")) {
         (None, false) => match workspace.state() {
             State::Stable { version } => version.to_string(),
             _ => current_version(&repository).await.version().to_string(),
@@ -417,7 +259,7 @@ async fn do_log(matches: &ArgMatches<'_>, workspace: &mut Workspace) {
         },
         None => 0,
     };
-    let oneline = matches.is_present("oneline");
+    let oneline = matches.get_flag("oneline");
     for version in versions.iter().skip(skip_n) {
         if oneline {
             println!(
@@ -439,7 +281,7 @@ async fn do_log(matches: &ArgMatches<'_>, workspace: &mut Workspace) {
     }
 }
 
-async fn do_check(matches: &ArgMatches<'_>, workspace: &mut Workspace) {
+pub async fn do_check(matches: &ArgMatches, workspace: &mut Workspace) {
     let mut stream = workspace.check();
     let state = match stream.next().await {
         Some(Ok(state)) => state,
@@ -456,7 +298,7 @@ async fn do_check(matches: &ArgMatches<'_>, workspace: &mut Workspace) {
     let state = state.borrow();
     let progress = state.histogram.progress();
 
-    let res = if matches.is_present("no_progress") {
+    let res = if matches.get_flag("no_progress") {
         drop(state); // drop the Ref<_>
 
         stream.try_for_each(|_state| future::ready(Ok(()))).await
@@ -468,15 +310,13 @@ async fn do_check(matches: &ArgMatches<'_>, workspace: &mut Workspace) {
         let sty = ProgressStyle::default_bar().progress_chars("##-");
 
         let check_bytes = m.add(ProgressBar::new(state.check_bytes));
-        check_bytes.set_style(sty.clone().template(CHECK_TPL));
+        check_bytes.set_style(sty.clone().template(CHECK_TPL).unwrap());
         check_bytes.set_position(progress.checked_bytes);
         check_bytes.reset_eta();
 
         LOGGER.set_progress_bar(Some(check_bytes.clone().downgrade()));
 
         drop(state); // drop the Ref<_>
-
-        let mp = tokio::task::spawn_blocking(move || m.join());
 
         let res = stream
             .try_for_each(|state| {
@@ -491,7 +331,6 @@ async fn do_check(matches: &ArgMatches<'_>, workspace: &mut Workspace) {
             .await;
 
         check_bytes.finish();
-        let _ = mp.await;
 
         res
     };
