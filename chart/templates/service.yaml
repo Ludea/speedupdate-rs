@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: speedupdate-http
+  name: speedupdate
   labels:
     {{- include "speedupdate_chart.labels" . | nindent 4 }}
 spec:
