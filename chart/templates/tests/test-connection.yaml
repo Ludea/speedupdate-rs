@@ -11,5 +11,5 @@ spec:
     - name: wget
       image: busybox
       command: ['wget']
-      args: ['speedupdate:3000/health']
+      args: ['speedupdate:443/health']
   restartPolicy: Never
