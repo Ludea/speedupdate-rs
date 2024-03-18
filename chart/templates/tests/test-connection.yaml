@@ -8,8 +8,8 @@ metadata:
     "helm.sh/hook": test
 spec:
   containers:
-    - name: wget
-      image: busybox
+    - name: netcat
+      image: subfuzion/netcat
       command: ['netcat']
       args: ['-zv 10.96.235.205']
   restartPolicy: Never
