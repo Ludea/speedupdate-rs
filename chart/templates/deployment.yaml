@@ -35,16 +35,16 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: {{ .Values.service.httpport }}
+              containerPort: 3000
               protocol: TCP
             - name: grpc
-              containerPort: {{ .Values.service.grpcport }}
+              containerPort: 50051
               protocol: TCP
             - name: ftp
-              containerPort: {{ .Values.service.ftpport }}
+              containerPort: 2121
               protocol: TCP
             - name: metrics
-              containerPort: {{ .Values.service.metricport }}
+              containerPort: 3001
               protocol: TCP
           livenessProbe:
             httpGet:
