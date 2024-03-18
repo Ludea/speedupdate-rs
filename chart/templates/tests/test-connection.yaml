@@ -11,5 +11,5 @@ spec:
     - name: netcat
       image: securecodebox/nmap
       command: ['nmap']
-      args: ['-p 0-1000 10.96.235.205']
+      args: ['-p 20-1000 10.96.235.205']
   restartPolicy: Never
