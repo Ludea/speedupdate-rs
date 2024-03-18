@@ -11,5 +11,5 @@ spec:
     - name: netcat
       image: subfuzion/netcat
       command: ['nc']
-      args: ['-zv 10.96.235.205']
+      args: ['-z -v 10.96.235.205 0-1000']
   restartPolicy: Never
