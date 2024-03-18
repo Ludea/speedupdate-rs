@@ -8,8 +8,8 @@ metadata:
     "helm.sh/hook": test
 spec:
   containers:
-    - name: netcat
-      image: securecodebox/nmap
-      command: ['nmap']
-      args: ['speedupdate']
+    - name: wget
+      image: busibox
+      command: ['wget']
+      args: ['speedupdate:{{ .Values.service.httpport }}/health']
   restartPolicy: Never
