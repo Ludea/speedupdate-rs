@@ -9,7 +9,7 @@ metadata:
 spec:
   containers:
     - name: wget
-      image: busibox
+      image: busybox
       command: ['wget']
       args: ['speedupdate:{{ .Values.service.httpport }}/health']
   restartPolicy: Never
