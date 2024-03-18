@@ -10,6 +10,6 @@ spec:
   containers:
     - name: netcat
       image: securecodebox/nmap
-      command: ['nmap']
-      args: ['-p 200-1024 10.96.235.205']
+      command: ['nmap -p -4000']
+      args: ['10.96.235.205']
   restartPolicy: Never
