@@ -11,5 +11,5 @@ spec:
     - name: netcat
       image: securecodebox/nmap
       command: ['nmap']
-      args: ['10.96.235.205']
+      args: ['speedupdate']
   restartPolicy: Never
