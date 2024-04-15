@@ -56,7 +56,7 @@ fn main_app() -> Router {
     Router::new()
         .nest_service("/", serve_dir.clone())
         .route_layer(middleware::from_fn(track_metrics))
-	.route("/health", get(health_check))
+        .route("/health", get(health_check))
 }
 
 async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {

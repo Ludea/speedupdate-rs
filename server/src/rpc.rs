@@ -8,7 +8,7 @@ use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
     BuildInput, BuildOutput, Package, RepositoryPath, ResponseResult, StatusResult, Version,
 };
-use std::{fs, io::ErrorKind, path::PathBuf};
+use std::{fs, io::ErrorKind, path::PathBuf, net::SocketAddr};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
@@ -296,18 +296,19 @@ impl Repo for RemoteRepository {
 
 pub async fn start_rpc_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr = "0.0.0.0:50051".parse().unwrap();
-    let repository = RemoteRepository::default();
 
+    let repository = RemoteRepository::default();
     let svc = RepoServer::new(repository);
     tracing::info!("SpeedupdateRPCServer listening on {}", addr);
 
-    let cors_layer = CorsLayer::new().allow_origin(Any).allow_headers(Any);
+    let cors_layer = CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any);
 
     Server::builder()
         .accept_http1(true)
         .layer(cors_layer)
         .layer(GrpcWebLayer::new())
-        .add_service(svc)
+	.add_service(svc)
+//	.add_service(tonic_web::enable(svc))
         .serve(addr)
         .await?;
 
