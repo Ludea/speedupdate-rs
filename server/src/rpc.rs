@@ -130,14 +130,6 @@ impl Repo for RemoteRepository {
         let repo = Repository::new(PathBuf::from(repository_path));
         let mut reply = ResponseResult { error: "".to_string() };
         let version_string = CleanName::new(inner.version).unwrap();
-        /*match CleanName::new(inner.version) {
-        Ok(value) => {
-            version_string = value
-        },
-        Err(err) => reply = ResponseResult {
-               error: err.to_string(),
-               }
-          }*/
 
         let description: Option<String> = None; // = inner.description;
         let description_file: Option<String> = None; // = inner.description_file
