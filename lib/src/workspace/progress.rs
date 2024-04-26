@@ -10,7 +10,6 @@ use std::fmt;
 use std::ops::{Add, AddAssign, Div, Sub, SubAssign};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, MutexGuard};
-//use tokio::sync::{Mutex, MutexGuard};
 
 #[derive(Clone)]
 pub struct SharedCheckProgress {
