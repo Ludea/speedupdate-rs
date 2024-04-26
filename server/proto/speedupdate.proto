@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package speedupdaterpc;
+package speedupdate;
 
 service Repo {
   rpc Init (RepositoryPath) returns (ResponseResult);
@@ -22,6 +22,7 @@ message StatusResult {
   string current_version = 2 ;
   repeated string versions = 3;
   repeated string packages = 4;
+  uint64 size = 5; 
 }
 
 message ResponseResult {

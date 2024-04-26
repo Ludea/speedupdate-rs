@@ -16,7 +16,7 @@ use tonic_web::GrpcWebLayer;
 use tower_http::cors::{Any, CorsLayer};
 
 pub mod speedupdaterpc {
-    tonic::include_proto!("speedupdaterpc");
+    tonic::include_proto!("speedupdate");
 }
 
 #[derive(Default)]
@@ -72,11 +72,13 @@ impl Repo for RemoteRepository {
             }
         }
         let mut list_packages = Vec::new();
+        let mut size = 0;
         match repo.packages() {
             Ok(value) => {
                 for val in value.iter() {
                     list_packages.push(val.package_data_name().to_string());
                 }
+		size = value.iter().map(|p| p.size()).sum::<u64>();
             }
             Err(error) => {
                 if error.kind() == ErrorKind::NotFound {
@@ -84,11 +86,10 @@ impl Repo for RemoteRepository {
                 }
             }
         };
-        //let size = list_packages.iter().map(|p| p.size()).sum::<u64>();
-        //println!("size {:?}", size);
 
         let reply = StatusResult {
             repoinit,
+	    size,
             current_version,
             versions: list_versions,
             packages: list_packages,
@@ -308,7 +309,6 @@ pub async fn start_rpc_server() -> Result<(), Box<dyn std::error::Error + Send +
         .layer(cors_layer)
         .layer(GrpcWebLayer::new())
 	.add_service(svc)
-//	.add_service(tonic_web::enable(svc))
         .serve(addr)
         .await?;
 
