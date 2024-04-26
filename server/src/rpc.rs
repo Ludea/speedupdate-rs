@@ -1,14 +1,15 @@
 use libspeedupdate::{
     metadata::{v1, CleanName},
     repository::{BuildOptions, CoderOptions, PackageBuilder},
-    workspace::Workspace,
+    workspace::{Workspace, UpdateOptions},
     Repository,
 };
+use futures::prelude::*;
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
     BuildInput, BuildOutput, Package, RepositoryPath, ResponseResult, StatusResult, Version,
 };
-use std::{fs, io::ErrorKind, path::PathBuf, net::SocketAddr};
+use std::{fs, io::ErrorKind, path::PathBuf};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
@@ -243,7 +244,7 @@ impl Repo for RemoteRepository {
             let link = repository.link();
             let mut workspace = Workspace::open(&prev_directory).unwrap();
             let goal_version = Some(prev_version.clone());
-            /*let update_stream = workspace.update(&link, goal_version, UpdateOptions::default());
+            let mut update_stream = workspace.update(&link, goal_version, UpdateOptions::default());
             let state = match update_stream.next().await {
                 Some(Ok(state)) => {
                     reply = BuildOutput { error: "foo".to_string() };
@@ -260,7 +261,7 @@ impl Repo for RemoteRepository {
             let res = update_stream.try_for_each(|_state| future::ready(Ok(()))).await;
             if let Err(err) = res {
                 reply = BuildOutput { error: err.to_string() }
-            }*/
+            }
             match workspace.remove_metadata() {
                 Ok(_) => (),
                 Err(error) => reply = BuildOutput { error: error.to_string() },
