@@ -127,6 +127,31 @@ impl Repository {
             .map_err(io::Error::from)
     }
 
+    pub fn available_packages(&self, build_dir: String) -> io::Result<Vec<String>> {
+        let mut available_packages = Vec::new();
+        if let Ok(registered_packages) = self.packages() {
+            if let Ok(entries) = fs::read_dir(self.dir.join(build_dir)) {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        let path = entry.path();
+                        let extension = path.extension().and_then(std::ffi::OsStr::to_str);
+                        if extension == Some("0") {
+                            for pack in registered_packages.iter() {
+                                if pack.package_data_name().to_string()
+                                    != entry.file_name().into_string().unwrap()
+                                {
+                                    available_packages
+                                        .push(entry.file_name().into_string().unwrap());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(available_packages)
+    }
+
     pub fn package_metadata(
         &self,
         package_metadata_name: &str,

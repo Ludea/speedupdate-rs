@@ -1,14 +1,23 @@
 use axum::{
-    extract::MatchedPath,
-    http::Request,
+    body::Bytes,
+    extract::{MatchedPath, Multipart},
+    http::{Request, StatusCode},
     middleware::{self, Next},
     response::IntoResponse,
-    routing::get,
-    Router,
+    routing::{get, post},
+    BoxError, Router,
 };
+use futures::{Stream, TryStreamExt};
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use std::{future::ready, net::SocketAddr};
-use tower_http::services::ServeDir;
+use std::{fs, future::ready, io, net::SocketAddr, path::Path};
+use tokio::{fs::File, io::BufWriter};
+use tokio_util::io::StreamReader;
+use tower_http::{
+    cors::{Any, CorsLayer},
+    services::ServeDir,
+};
+
+const UPLOADS_DIRECTORY: &str = "uploads";
 
 async fn health_check() -> &'static str {
     "OK"
@@ -42,21 +51,18 @@ fn setup_metrics_recorder() -> PrometheusHandle {
         .unwrap()
 }
 
-async fn start_main_server() {
-    let app = main_app();
-
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    tracing::info!("HTTP server listening on {}", addr);
-    axum::Server::bind(&addr).serve(app.into_make_service()).await.unwrap()
-}
-
-fn main_app() -> Router {
+pub async fn http_api() -> Router {
     let serve_dir = ServeDir::new("/opt/speedupdate");
+    if let Err(err) = tokio::fs::create_dir_all(UPLOADS_DIRECTORY).await {
+        tracing::error!("failed to create `uploads` directory: {}", err);
+    }
 
     Router::new()
         .nest_service("/", serve_dir.clone())
         .route_layer(middleware::from_fn(track_metrics))
         .route("/health", get(health_check))
+        .route("/file/:file_name", post(accept_form))
+        .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
 }
 
 async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
@@ -78,9 +84,60 @@ async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
     response
 }
 
-pub async fn start_http_server() {
-    // The `/metrics` endpoint should not be publicly available. If behind a reverse proxy, this
-    // can be achieved by rejecting requests to `/metrics`. In this example, a second server is
-    // started on another port to expose `/metrics`.
-    let (_main_server, _metrics_server) = tokio::join!(start_main_server(), start_metrics_server());
+async fn stream_to_file<S, E>(path: &str, stream: S) -> Result<(), (StatusCode, String)>
+where
+    S: Stream<Item = Result<Bytes, E>>,
+    E: Into<BoxError>,
+{
+    if !path_is_valid(path) {
+        return Err((StatusCode::BAD_REQUEST, "Invalid path".to_owned()));
+    }
+
+    async {
+        // Convert the stream into an `AsyncRead`.
+        let body_with_io_error = stream.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
+        let body_reader = StreamReader::new(body_with_io_error);
+        futures::pin_mut!(body_reader);
+
+        if let Some(file_stem_os) = Path::new(&path).file_stem() {
+            if let Some(file_stem_str) = file_stem_os.to_str() {
+                let path = std::path::Path::new(UPLOADS_DIRECTORY).join(file_stem_str).join(path);
+                fs::create_dir_all(UPLOADS_DIRECTORY.to_owned() + "/" + file_stem_str);
+                let mut file = BufWriter::new(File::create(path).await.unwrap());
+
+                // Copy the body into the file.
+                tokio::io::copy(&mut body_reader, &mut file).await;
+                Ok::<_, io::Error>(());
+            } else {
+                println!("Le nom du fichier n'est pas valide.");
+            }
+        } else {
+            println!("Le fichier n'a pas de nom valide.");
+        }
+    }
+    .await;
+    Ok(())
+    //    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
+}
+
+fn path_is_valid(path: &str) -> bool {
+    let path = std::path::Path::new(path);
+    let mut components = path.components().peekable();
+
+    if let Some(first) = components.peek() {
+        if !matches!(first, std::path::Component::Normal(_)) {
+            return false;
+        }
+    }
+
+    components.count() == 1
+}
+
+async fn accept_form(mut multipart: Multipart) -> Result<(), (StatusCode, String)> {
+    while let Some(field) = multipart.next_field().await.unwrap() {
+        let file_name = field.file_name().unwrap().to_string();
+
+        stream_to_file(&file_name, field).await?
+    }
+    Ok(())
 }

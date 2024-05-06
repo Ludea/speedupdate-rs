@@ -1,10 +1,10 @@
+use futures::prelude::*;
 use libspeedupdate::{
     metadata::{v1, CleanName},
     repository::{BuildOptions, CoderOptions, PackageBuilder},
-    workspace::{Workspace, UpdateOptions},
+    workspace::{UpdateOptions, Workspace},
     Repository,
 };
-use futures::prelude::*;
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
     BuildInput, BuildOutput, Package, RepositoryPath, ResponseResult, StatusResult, Version,
@@ -12,8 +12,12 @@ use speedupdaterpc::{
 use std::{fs, io::ErrorKind, path::PathBuf};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{
+    transport::{server::Router, Server},
+    Request, Response, Status,
+};
 use tonic_web::GrpcWebLayer;
+use tower::layer::util::Stack;
 use tower_http::cors::{Any, CorsLayer};
 
 pub mod speedupdaterpc {
@@ -79,7 +83,7 @@ impl Repo for RemoteRepository {
                 for val in value.iter() {
                     list_packages.push(val.package_data_name().to_string());
                 }
-		size = value.iter().map(|p| p.size()).sum::<u64>();
+                size = value.iter().map(|p| p.size()).sum::<u64>();
             }
             Err(error) => {
                 if error.kind() == ErrorKind::NotFound {
@@ -88,12 +92,15 @@ impl Repo for RemoteRepository {
             }
         };
 
+        let available_packages = repo.available_packages(".build".to_string()).unwrap();
+
         let reply = StatusResult {
             repoinit,
-	    size,
+            size,
             current_version,
             versions: list_versions,
             packages: list_packages,
+            available_packages,
         };
 
         let (tx, rx) = mpsc::channel(4);
@@ -169,6 +176,7 @@ impl Repo for RemoteRepository {
         }
         Ok(Response::new(reply))
     }
+
     async fn register_package(
         &self,
         request: Request<Package>,
@@ -184,6 +192,7 @@ impl Repo for RemoteRepository {
         }
         Ok(Response::new(reply))
     }
+
     async fn unregister_package(
         &self,
         request: Request<Package>,
@@ -197,6 +206,14 @@ impl Repo for RemoteRepository {
             Ok(_) => (),
             Err(value) => reply = ResponseResult { error: value.to_string() },
         }
+        Ok(Response::new(reply))
+    }
+
+    async fn available_packages(
+        &self,
+        request: Request<RepositoryPath>,
+    ) -> Result<Response<ResponseResult>, Status> {
+        let mut reply = ResponseResult { error: "".to_string() };
         Ok(Response::new(reply))
     }
 
@@ -245,7 +262,7 @@ impl Repo for RemoteRepository {
             let mut workspace = Workspace::open(&prev_directory).unwrap();
             let goal_version = Some(prev_version.clone());
             let mut update_stream = workspace.update(&link, goal_version, UpdateOptions::default());
-            let state = match update_stream.next().await {
+            /*            let state = match update_stream.next().await {
                 Some(Ok(state)) => {
                     reply = BuildOutput { error: "foo".to_string() };
                     state
@@ -266,11 +283,11 @@ impl Repo for RemoteRepository {
                 Ok(_) => (),
                 Err(error) => reply = BuildOutput { error: error.to_string() },
             }
-            builder.set_previous(prev_version, prev_directory);
+            builder.set_previous(prev_version, prev_directory); */
         }
 
-        let mut build_stream = builder.build();
-        /*let mut build_state;
+        /*let mut build_stream = builder.build();
+        let mut build_state;
         let state = match build_stream.next().await {
             Some(Ok(state)) => state,
             Some(Err(err)) => {
@@ -288,12 +305,9 @@ impl Repo for RemoteRepository {
     }
 }
 
-pub async fn start_rpc_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let addr = "0.0.0.0:50051".parse().unwrap();
-
+pub fn rpc_api() -> Router<Stack<GrpcWebLayer, Stack<CorsLayer, tower::layer::util::Identity>>> {
     let repository = RemoteRepository::default();
     let svc = RepoServer::new(repository);
-    tracing::info!("SpeedupdateRPCServer listening on {}", addr);
 
     let cors_layer = CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any);
 
@@ -301,9 +315,5 @@ pub async fn start_rpc_server() -> Result<(), Box<dyn std::error::Error + Send +
         .accept_http1(true)
         .layer(cors_layer)
         .layer(GrpcWebLayer::new())
-	.add_service(svc)
-        .serve(addr)
-        .await?;
-
-    Ok(())
+        .add_service(svc)
 }

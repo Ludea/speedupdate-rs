@@ -1,7 +1,9 @@
+use self::multiplex_service::MultiplexService;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod ftp;
 mod http;
+mod multiplex_service;
 mod rpc;
 //mod utils;
 
@@ -22,12 +24,18 @@ async fn main() {
         )
         .init();
 
-    let rpc_server = tokio::spawn(rpc::start_rpc_server());
-    let ftp_server = tokio::spawn(ftp::start_ftp_server());
-    let http_server = tokio::spawn(http::start_http_server());
+    let http = http::http_api().await;
+    let grpc = rpc::rpc_api().into_service();
+    let service = MultiplexService::new(http, grpc);
 
-    match tokio::try_join!(rpc_server, ftp_server, http_server) {
-        Ok(_) => (),
-        Err(err) => tracing::error!("Error {}", err),
-    }
+    let addr = "0.0.0.0:3000".parse().unwrap();
+    tracing::info!("Speedupdate gRPC and HTTP server listening on {}", addr);
+    axum::Server::bind(&addr).serve(tower::make::Shared::new(service)).await.unwrap();
+
+    //let ftp_server = tokio::spawn(ftp::start_ftp_server());
+
+    //match tokio::try_join!(rpc_server, ftp_server, http_server) {
+    //    Ok(_) => (),
+    //    Err(err) => tracing::error!("Error {}", err),
+    //}
 }
