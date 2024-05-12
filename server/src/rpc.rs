@@ -9,7 +9,11 @@ use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
     BuildInput, BuildOutput, Package, RepositoryPath, ResponseResult, StatusResult, Version,
 };
-use std::{fs, io::ErrorKind, path::PathBuf};
+use std::{
+    fs,
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
@@ -94,19 +98,53 @@ impl Repo for RemoteRepository {
 
         let available_packages = repo.available_packages(".build".to_string()).unwrap();
 
-        let reply = StatusResult {
-            repoinit,
-            size,
-            current_version,
-            versions: list_versions,
-            packages: list_packages,
-            available_packages,
+        let mut available_binaries = Vec::new();
+        let binaries_folder = Path::new("uploads");
+        for entry in fs::read_dir(binaries_folder).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.is_dir() {
+                available_binaries.push(path.file_name().unwrap().to_str().unwrap().to_string());
+                //.unwrap());
+            }
+        }
+
+        let mut reply = StatusResult {
+            repoinit: repoinit.clone(),
+            size: size.clone(),
+            current_version: current_version.clone(),
+            versions: list_versions.clone(),
+            packages: list_packages.clone(),
+            available_packages: available_packages.clone(),
+            available_binaries: available_binaries.clone(),
+        };
+
+        let mut old_reply = StatusResult {
+            repoinit: false,
+            size: 0,
+            current_version: "".to_string(),
+            versions: Vec::new(),
+            packages: Vec::new(),
+            available_packages: Vec::new(),
+            available_binaries: Vec::new(),
         };
 
         let (tx, rx) = mpsc::channel(4);
-        tokio::spawn(async move {
-            tx.send(Ok(reply)).await.unwrap();
-        });
+        //tokio::spawn(async move {
+        if old_reply != reply {
+            tx.send(Ok(reply.clone())).await.unwrap();
+            old_reply = reply.clone();
+            reply = StatusResult {
+                repoinit,
+                size: 1789,
+                current_version: current_version.clone(),
+                versions: list_versions.clone(),
+                packages: list_packages.clone(),
+                available_packages: available_packages.clone(),
+                available_binaries: available_binaries.clone(),
+            };
+        }
+        //});
 
         Ok(Response::new(ReceiverStream::new(rx)))
     }
