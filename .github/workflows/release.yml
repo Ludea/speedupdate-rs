@@ -145,7 +145,7 @@ jobs:
       uses: docker/setup-qemu-action@v3
     - name: Get version
       id: version
-      uses: mikefarah/yq@v4.43.1
+      uses: mikefarah/yq@v4.44.1
       with:
         cmd: yq '.package.version' server/Cargo.toml
     - name: Build container 
