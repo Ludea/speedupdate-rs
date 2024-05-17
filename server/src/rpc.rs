@@ -5,6 +5,7 @@ use libspeedupdate::{
     workspace::{UpdateOptions, Workspace},
     Repository,
 };
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
     BuildInput, BuildOutput, Package, RepositoryPath, ResponseResult, StatusResult, Version,
@@ -13,6 +14,8 @@ use std::{
     fs,
     io::ErrorKind,
     path::{Path, PathBuf},
+    pin::Pin,
+    time::Duration,
 };
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -28,7 +31,8 @@ pub mod speedupdaterpc {
     tonic::include_proto!("speedupdate");
 }
 
-#[derive(Default)]
+type ResponseStream = Pin<Box<dyn Stream<Item = Result<StatusResult, Status>> + Send>>;
+
 pub struct RemoteRepository {}
 
 #[tonic::async_trait]
@@ -40,113 +44,64 @@ impl Repo for RemoteRepository {
         let repository_path = request.into_inner().path;
         let mut repo = Repository::new(PathBuf::from(repository_path));
         let mut reply = ResponseResult { error: "".to_string() };
-        match repo.init() {
-            Ok(_) => (),
-            Err(err) => reply = ResponseResult { error: err.to_string() },
+        if let Err(err) = repo.init() {
+            tracing::error!("{}", err);
+            reply = ResponseResult { error: err.to_string() };
         }
         Ok(Response::new(reply))
     }
 
-    type StatusStream = ReceiverStream<Result<StatusResult, Status>>;
+    type StatusStream = ResponseStream;
 
     async fn status(
         &self,
         request: Request<RepositoryPath>,
     ) -> Result<Response<Self::StatusStream>, Status> {
         let repository_path = request.into_inner().path;
-        let repo = Repository::new(PathBuf::from(repository_path));
-        let current_version;
-        let mut repoinit = false;
-        match repo.current_version() {
-            Ok(value) => current_version = value.version().to_string(),
-            Err(error) => {
-                if error.kind() == ErrorKind::NotFound {
-                    repoinit = false;
-                }
-                current_version = "-".to_string();
-            }
-        }
-        let mut list_versions: Vec<String> = Vec::new();
-        match repo.versions() {
-            Ok(value) => {
-                for val in value.iter() {
-                    list_versions.push(val.revision().to_string())
-                }
-                repoinit = true;
-            }
-            Err(error) => {
-                if error.kind() == ErrorKind::NotFound {
-                    repoinit = false;
-                }
-            }
-        }
-        let mut list_packages = Vec::new();
-        let mut size = 0;
-        match repo.packages() {
-            Ok(value) => {
-                for val in value.iter() {
-                    list_packages.push(val.package_data_name().to_string());
-                }
-                size = value.iter().map(|p| p.size()).sum::<u64>();
-            }
-            Err(error) => {
-                if error.kind() == ErrorKind::NotFound {
-                    repoinit = false;
-                }
-            }
-        };
+        let mut state = repo_state(repository_path.clone());
 
-        let available_packages = repo.available_packages(".build".to_string()).unwrap();
+        let (local_tx, mut local_rx) = mpsc::channel(1);
+        let (tx, rx) = mpsc::channel(128);
+        if let Err(err) = tx.send(Result::<_, Status>::Ok(state.clone())).await {
+            tracing::error!("{}", err);
+        }
+        // send_message(tx.clone(), state.clone()).await;
 
-        let mut available_binaries = Vec::new();
-        let binaries_folder = Path::new("uploads");
-        for entry in fs::read_dir(binaries_folder).unwrap() {
-            let entry = entry.unwrap();
-            let path = entry.path();
-            if path.is_dir() {
-                available_binaries.push(path.file_name().unwrap().to_str().unwrap().to_string());
-                //.unwrap());
+        let config = Config::default().with_poll_interval(Duration::from_secs(1));
+        let mut watcher = notify::PollWatcher::new(
+            move |res| match res {
+                Ok(_) => {
+                    if let Err(err) = local_tx.blocking_send(res) {
+                        tracing::error!("{:?}", err);
+                    }
+                }
+                Err(err) => tracing::error!("{}", err),
+            },
+            config,
+        )
+        .unwrap();
+        watcher.watch(Path::new("./current"), RecursiveMode::NonRecursive).unwrap();
+        watcher.watch(Path::new("./packages"), RecursiveMode::NonRecursive).unwrap();
+        watcher.watch(Path::new("./versions"), RecursiveMode::NonRecursive).unwrap();
+
+        if let Err(err) = tokio::task::spawn(async move {
+            while let Some(Ok(file)) = local_rx.recv().await {
+                state = repo_state(repository_path.clone());
+
+                if let Err(err) = tx.send(Result::<_, Status>::Ok(state)).await {
+                    tracing::error!("{}", err);
+                }
+                //send_message(tx.clone(), state).await;
+                println!("Received file: {:?}", file);
             }
+        })
+        .await
+        {
+            tracing::error!("{}", err);
         }
 
-        let mut reply = StatusResult {
-            repoinit: repoinit.clone(),
-            size: size.clone(),
-            current_version: current_version.clone(),
-            versions: list_versions.clone(),
-            packages: list_packages.clone(),
-            available_packages: available_packages.clone(),
-            available_binaries: available_binaries.clone(),
-        };
-
-        let mut old_reply = StatusResult {
-            repoinit: false,
-            size: 0,
-            current_version: "".to_string(),
-            versions: Vec::new(),
-            packages: Vec::new(),
-            available_packages: Vec::new(),
-            available_binaries: Vec::new(),
-        };
-
-        let (tx, rx) = mpsc::channel(4);
-        //tokio::spawn(async move {
-        if old_reply != reply {
-            tx.send(Ok(reply.clone())).await.unwrap();
-            old_reply = reply.clone();
-            reply = StatusResult {
-                repoinit,
-                size: 1789,
-                current_version: current_version.clone(),
-                versions: list_versions.clone(),
-                packages: list_packages.clone(),
-                available_packages: available_packages.clone(),
-                available_binaries: available_binaries.clone(),
-            };
-        }
-        //});
-
-        Ok(Response::new(ReceiverStream::new(rx)))
+        let output_stream = ReceiverStream::new(rx);
+        Ok(Response::new(Box::pin(output_stream) as Self::StatusStream))
     }
 
     async fn set_current_version(
@@ -167,6 +122,7 @@ impl Repo for RemoteRepository {
         }
         Ok(Response::new(reply))
     }
+
     async fn register_version(
         &self,
         request: Request<Version>,
@@ -197,6 +153,10 @@ impl Repo for RemoteRepository {
             Ok(_) => (),
             Err(value) => reply = ResponseResult { error: value.to_string() },
         }
+
+        //let tx = Arc::clone(&self.tx);
+        //let tx = tx.lock().await;
+
         Ok(Response::new(reply))
     }
     async fn unregister_version(
@@ -343,9 +303,88 @@ impl Repo for RemoteRepository {
     }
 }
 
+fn repo_state(path: String) -> StatusResult {
+    let repo = Repository::new(PathBuf::from(path));
+    let current_version;
+    let mut repoinit = false;
+    match repo.current_version() {
+        Ok(value) => current_version = value.version().to_string(),
+        Err(error) => {
+            if error.kind() == ErrorKind::NotFound {
+                repoinit = false;
+            }
+            current_version = "-".to_string();
+        }
+    }
+    let mut list_versions: Vec<String> = Vec::new();
+    match repo.versions() {
+        Ok(value) => {
+            for val in value.iter() {
+                list_versions.push(val.revision().to_string())
+            }
+            repoinit = true;
+        }
+        Err(error) => {
+            if error.kind() == ErrorKind::NotFound {
+                repoinit = false;
+            }
+        }
+    }
+    let mut list_packages = Vec::new();
+    let mut size = 0;
+    match repo.packages() {
+        Ok(value) => {
+            for val in value.iter() {
+                list_packages.push(val.package_data_name().to_string());
+            }
+            size = value.iter().map(|p| p.size()).sum::<u64>();
+        }
+        Err(error) => {
+            if error.kind() == ErrorKind::NotFound {
+                repoinit = false;
+            }
+        }
+    };
+
+    let available_packages = repo.available_packages(".build".to_string()).unwrap();
+
+    let mut available_binaries = Vec::new();
+    let binaries_folder = Path::new("uploads");
+    for entry in fs::read_dir(binaries_folder).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.is_dir() {
+            available_binaries.push(path.file_name().unwrap().to_str().unwrap().to_string());
+        }
+    }
+
+    let reply = StatusResult {
+        repoinit: repoinit,
+        size: size,
+        current_version: current_version,
+        versions: list_versions,
+        packages: list_packages,
+        available_packages: available_packages,
+        available_binaries: available_binaries,
+    };
+
+    return reply;
+}
+
+async fn send_message(
+    tx: tokio::sync::mpsc::Sender<Result<StatusResult, Status>>,
+    message: StatusResult,
+) {
+    tokio::spawn(async move {
+        if let Err(err) = tx.send(Result::<_, Status>::Ok(message)).await {
+            tracing::error!("{}", err);
+        }
+    });
+}
+
 pub fn rpc_api() -> Router<Stack<GrpcWebLayer, Stack<CorsLayer, tower::layer::util::Identity>>> {
-    let repository = RemoteRepository::default();
-    let svc = RepoServer::new(repository);
+    let repo = RemoteRepository {};
+    let svc = RepoServer::new(repo);
 
     let cors_layer = CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any);
 

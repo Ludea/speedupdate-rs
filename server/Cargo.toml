@@ -33,6 +33,7 @@ tracing-subscriber = { version = "0.3", features = ["tracing-log", "env-filter"]
 hyper = { version = "0.14", feature = ["full"] }
 http = "1.1.0"
 tower = { version = "0.4", features = ["full"] }
+notify = { version = "6", default-features = false }
 
 [build-dependencies]
 tonic-build = { version = "0.11.0", features = ["prost"] }
