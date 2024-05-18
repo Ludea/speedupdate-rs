@@ -62,10 +62,8 @@ impl Repo for RemoteRepository {
 
         let (local_tx, mut local_rx) = mpsc::channel(1);
         let (tx, rx) = mpsc::channel(128);
-        if let Err(err) = tx.send(Result::<_, Status>::Ok(state.clone())).await {
-            tracing::error!("{}", err);
-        }
-        // send_message(tx.clone(), state.clone()).await;
+
+        send_message(tx, state).await;
 
         let config = Config::default().with_poll_interval(Duration::from_secs(1));
         let mut watcher = notify::PollWatcher::new(
@@ -86,12 +84,6 @@ impl Repo for RemoteRepository {
 
         if let Err(err) = tokio::task::spawn(async move {
             while let Some(Ok(file)) = local_rx.recv().await {
-                state = repo_state(repository_path.clone());
-
-                if let Err(err) = tx.send(Result::<_, Status>::Ok(state)).await {
-                    tracing::error!("{}", err);
-                }
-                //send_message(tx.clone(), state).await;
                 println!("Received file: {:?}", file);
             }
         })
@@ -369,6 +361,42 @@ fn repo_state(path: String) -> StatusResult {
     };
 
     return reply;
+}
+
+fn async_watcher(
+) -> notify::Result<(notify::PollWatcher, mpsc::Receiver<notify::Result<notify::Event>>)> {
+    let (mut tx, rx) = mpsc::channel(1);
+
+    let config = Config::default().with_poll_interval(Duration::from_secs(1));
+
+    let watcher = notify::PollWatcher::new(
+        move |res| match res {
+            Ok(_) => {
+                if let Err(err) = tx.blocking_send(res) {
+                    tracing::error!("{:?}", err);
+                }
+            }
+            Err(err) => tracing::error!("{}", err),
+        },
+        config,
+    )?;
+
+    Ok((watcher, rx))
+}
+
+async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
+    let (mut watcher, mut rx) = async_watcher()?;
+
+    watcher.watch(path.as_ref(), RecursiveMode::NonRecursive)?;
+
+    while let Some(res) = rx.recv().await {
+        match res {
+            Ok(event) => println!("changed: {:?}", event),
+            Err(e) => println!("watch error: {:?}", e),
+        }
+    }
+
+    Ok(())
 }
 
 async fn send_message(
