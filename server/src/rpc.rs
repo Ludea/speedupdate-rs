@@ -63,7 +63,7 @@ impl Repo for RemoteRepository {
         let (local_tx, mut local_rx) = mpsc::channel(1);
         let (tx, rx) = mpsc::channel(128);
 
-        send_message(tx, state).await;
+        send_message(tx.clone(), state);
 
         let config = Config::default().with_poll_interval(Duration::from_secs(1));
         let mut watcher = notify::PollWatcher::new(
@@ -82,15 +82,18 @@ impl Repo for RemoteRepository {
         watcher.watch(Path::new("./packages"), RecursiveMode::NonRecursive).unwrap();
         watcher.watch(Path::new("./versions"), RecursiveMode::NonRecursive).unwrap();
 
-        if let Err(err) = tokio::task::spawn(async move {
+        //if let Err(err) =
+        tokio::task::spawn(async move {
             while let Some(Ok(file)) = local_rx.recv().await {
                 println!("Received file: {:?}", file);
+                let new_state = repo_state("./".to_string());
+                send_message(tx.clone(), new_state);
             }
-        })
-        .await
-        {
-            tracing::error!("{}", err);
-        }
+        });
+
+        //    {
+        //       tracing::error!("{}", err);1
+        //  }
 
         let output_stream = ReceiverStream::new(rx);
         Ok(Response::new(Box::pin(output_stream) as Self::StatusStream))
@@ -145,9 +148,6 @@ impl Repo for RemoteRepository {
             Ok(_) => (),
             Err(value) => reply = ResponseResult { error: value.to_string() },
         }
-
-        //let tx = Arc::clone(&self.tx);
-        //let tx = tx.lock().await;
 
         Ok(Response::new(reply))
     }
@@ -399,7 +399,7 @@ async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
     Ok(())
 }
 
-async fn send_message(
+fn send_message(
     tx: tokio::sync::mpsc::Sender<Result<StatusResult, Status>>,
     message: StatusResult,
 ) {
