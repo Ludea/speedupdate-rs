@@ -5,7 +5,7 @@ use libspeedupdate::{
     workspace::{UpdateOptions, Workspace},
     Repository,
 };
-use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Config, RecursiveMode, Watcher};
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
     BuildInput, BuildOutput, Package, RepositoryPath, ResponseResult, StatusResult, Version,
@@ -58,7 +58,7 @@ impl Repo for RemoteRepository {
         request: Request<RepositoryPath>,
     ) -> Result<Response<Self::StatusStream>, Status> {
         let repository_path = request.into_inner().path;
-        let mut state = repo_state(repository_path.clone());
+        let state = repo_state(repository_path.clone());
 
         let (local_tx, mut local_rx) = mpsc::channel(1);
         let (tx, rx) = mpsc::channel(128);
@@ -82,7 +82,6 @@ impl Repo for RemoteRepository {
         watcher.watch(Path::new("./packages"), RecursiveMode::NonRecursive).unwrap();
         watcher.watch(Path::new("./versions"), RecursiveMode::NonRecursive).unwrap();
 
-        //if let Err(err) =
         tokio::task::spawn(async move {
             while let Some(Ok(file)) = local_rx.recv().await {
                 println!("Received file: {:?}", file);
@@ -90,10 +89,6 @@ impl Repo for RemoteRepository {
                 send_message(tx.clone(), new_state);
             }
         });
-
-        //    {
-        //       tracing::error!("{}", err);1
-        //  }
 
         let output_stream = ReceiverStream::new(rx);
         Ok(Response::new(Box::pin(output_stream) as Self::StatusStream))
@@ -361,42 +356,6 @@ fn repo_state(path: String) -> StatusResult {
     };
 
     return reply;
-}
-
-fn async_watcher(
-) -> notify::Result<(notify::PollWatcher, mpsc::Receiver<notify::Result<notify::Event>>)> {
-    let (mut tx, rx) = mpsc::channel(1);
-
-    let config = Config::default().with_poll_interval(Duration::from_secs(1));
-
-    let watcher = notify::PollWatcher::new(
-        move |res| match res {
-            Ok(_) => {
-                if let Err(err) = tx.blocking_send(res) {
-                    tracing::error!("{:?}", err);
-                }
-            }
-            Err(err) => tracing::error!("{}", err),
-        },
-        config,
-    )?;
-
-    Ok((watcher, rx))
-}
-
-async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
-    let (mut watcher, mut rx) = async_watcher()?;
-
-    watcher.watch(path.as_ref(), RecursiveMode::NonRecursive)?;
-
-    while let Some(res) = rx.recv().await {
-        match res {
-            Ok(event) => println!("changed: {:?}", event),
-            Err(e) => println!("watch error: {:?}", e),
-        }
-    }
-
-    Ok(())
 }
 
 fn send_message(
