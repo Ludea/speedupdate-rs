@@ -17,6 +17,7 @@ use std::{
     pin::Pin,
     time::Duration,
 };
+
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
@@ -83,13 +84,19 @@ impl Repo for RemoteRepository {
         watcher.watch(Path::new("./versions"), RecursiveMode::NonRecursive).unwrap();
 
         tokio::task::spawn(async move {
+            let _watcher = watcher;
             while let Some(Ok(file)) = local_rx.recv().await {
-                println!("Received file: {:?}", file);
                 let new_state = repo_state("./".to_string());
-                send_message(tx.clone(), new_state);
+                let tx_clone = tx.clone();
+                tokio::spawn(async move {
+                    if let Err(err) = tx_clone.send(Result::<_, Status>::Ok(new_state)).await {
+                        tracing::error!("{}", err);
+                    }
+                })
+                .await
+                .unwrap();
             }
         });
-
         let output_stream = ReceiverStream::new(rx);
         Ok(Response::new(Box::pin(output_stream) as Self::StatusStream))
     }
