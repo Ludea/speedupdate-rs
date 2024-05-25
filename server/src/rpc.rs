@@ -8,7 +8,8 @@ use libspeedupdate::{
 use notify::{Config, RecursiveMode, Watcher};
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
-    BuildInput, BuildOutput, Package, RepositoryPath, ResponseResult, StatusResult, Version,
+    BuildInput, BuildOutput, FileToDelete, Package, RepositoryPath, ResponseResult, StatusResult,
+    Version,
 };
 use std::{
     fs,
@@ -21,6 +22,7 @@ use std::{
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
+    metadata::MetadataValue,
     transport::{server::Router, Server},
     Request, Response, Status,
 };
@@ -82,19 +84,13 @@ impl Repo for RemoteRepository {
         watcher.watch(Path::new("./current"), RecursiveMode::NonRecursive).unwrap();
         watcher.watch(Path::new("./packages"), RecursiveMode::NonRecursive).unwrap();
         watcher.watch(Path::new("./versions"), RecursiveMode::NonRecursive).unwrap();
+        watcher.watch(Path::new("./.build"), RecursiveMode::NonRecursive).unwrap();
 
         tokio::task::spawn(async move {
             let _watcher = watcher;
             while let Some(Ok(file)) = local_rx.recv().await {
                 let new_state = repo_state("./".to_string());
-                let tx_clone = tx.clone();
-                tokio::spawn(async move {
-                    if let Err(err) = tx_clone.send(Result::<_, Status>::Ok(new_state)).await {
-                        tracing::error!("{}", err);
-                    }
-                })
-                .await
-                .unwrap();
+                send_message(tx.clone(), new_state);
             }
         });
         let output_stream = ReceiverStream::new(rx);
@@ -175,7 +171,7 @@ impl Repo for RemoteRepository {
     ) -> Result<Response<ResponseResult>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
-        let package = inner.name;
+        let package = ".build/".to_owned() + &inner.name + ".metadata";
         let repo = Repository::new(PathBuf::from(repository_path));
         let mut reply = ResponseResult { error: "".to_string() };
         match repo.register_package(package.as_str()) {
@@ -191,7 +187,7 @@ impl Repo for RemoteRepository {
     ) -> Result<Response<ResponseResult>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
-        let package = inner.name;
+        let package = ".build/".to_owned() + &inner.name + ".metadata";
         let repo = Repository::new(PathBuf::from(repository_path));
         let mut reply = ResponseResult { error: "".to_string() };
         match repo.unregister_package(package.as_str()) {
@@ -295,6 +291,22 @@ impl Repo for RemoteRepository {
         }*/
         Ok(Response::new(reply))
     }
+
+    async fn delete_file(
+        &self,
+        request: Request<FileToDelete>,
+    ) -> Result<Response<ResponseResult>, Status> {
+        let file = request.into_inner().file;
+        let mut error: String = "".to_string();
+        if let Err(err) = fs::remove_file(".build/".to_owned() + &file) {
+            error = err.to_string();
+        }
+        if let Err(err) = fs::remove_file(".build/".to_owned() + &file + ".metadata") {
+            error = err.to_string();
+        }
+        let mut reply = ResponseResult { error: error };
+        Ok(Response::new(reply))
+    }
 }
 
 fn repo_state(path: String) -> StatusResult {
@@ -370,15 +382,13 @@ fn send_message(
     message: StatusResult,
 ) {
     tokio::spawn(async move {
-        if let Err(err) = tx.send(Result::<_, Status>::Ok(message)).await {
-            tracing::error!("{}", err);
-        }
+        let _ = tx.send(Result::<_, Status>::Ok(message)).await;
     });
 }
 
 pub fn rpc_api() -> Router<Stack<GrpcWebLayer, Stack<CorsLayer, tower::layer::util::Identity>>> {
     let repo = RemoteRepository {};
-    let svc = RepoServer::new(repo);
+    let svc = RepoServer::new(repo); //with_interceptor(repo, check_auth);;
 
     let cors_layer = CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any);
 
@@ -387,4 +397,13 @@ pub fn rpc_api() -> Router<Stack<GrpcWebLayer, Stack<CorsLayer, tower::layer::ut
         .layer(cors_layer)
         .layer(GrpcWebLayer::new())
         .add_service(svc)
+}
+
+fn check_auth(req: Request<()>) -> Result<Request<()>, Status> {
+    let token: MetadataValue<_> = "Bearer some-secret-token".parse().unwrap();
+
+    match req.metadata().get("authorization") {
+        Some(t) if token == t => Ok(req),
+        _ => Err(Status::unauthenticated("No valid auth token")),
+    }
 }

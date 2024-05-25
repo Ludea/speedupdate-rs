@@ -11,11 +11,16 @@ service Repo {
   rpc Register_package (Package) returns (ResponseResult);
   rpc Unregister_package (Package) returns (ResponseResult);
   rpc Available_packages (RepositoryPath) returns (ResponseResult);
+  rpc Delete_file (FileToDelete) returns (ResponseResult);
   rpc Build_package (BuildInput) returns (BuildOutput);
 }
 
 message RepositoryPath {
   string path = 1;
+}
+
+message FileToDelete {
+  string file = 1;
 }
 
 message StatusResult {
