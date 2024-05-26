@@ -8,8 +8,8 @@ use libspeedupdate::{
 use notify::{Config, RecursiveMode, Watcher};
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
-    BuildInput, BuildOutput, FileToDelete, Package, RepositoryPath, ResponseResult, StatusResult,
-    Version,
+    BuildInput, BuildOutput, Empty, FileToDelete, ListPackVerBin, Package, RepoStatus,
+    RepositoryPath, Version,
 };
 use std::{
     fs,
@@ -34,24 +34,21 @@ pub mod speedupdaterpc {
     tonic::include_proto!("speedupdate");
 }
 
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<StatusResult, Status>> + Send>>;
+type ResponseStream = Pin<Box<dyn Stream<Item = Result<RepoStatus, Status>> + Send>>;
 
 pub struct RemoteRepository {}
 
 #[tonic::async_trait]
 impl Repo for RemoteRepository {
-    async fn init(
-        &self,
-        request: Request<RepositoryPath>,
-    ) -> Result<Response<ResponseResult>, Status> {
+    async fn init(&self, request: Request<RepositoryPath>) -> Result<Response<Empty>, Status> {
         let repository_path = request.into_inner().path;
         let mut repo = Repository::new(PathBuf::from(repository_path));
-        let mut reply = ResponseResult { error: "".to_string() };
-        if let Err(err) = repo.init() {
-            tracing::error!("{}", err);
-            reply = ResponseResult { error: err.to_string() };
+        let reply = Empty {};
+
+        match repo.init() {
+            Ok(_) => Ok(Response::new(reply)),
+            Err(err) => Err(Status::internal(err.to_string())),
         }
-        Ok(Response::new(reply))
     }
 
     type StatusStream = ResponseStream;
@@ -61,7 +58,13 @@ impl Repo for RemoteRepository {
         request: Request<RepositoryPath>,
     ) -> Result<Response<Self::StatusStream>, Status> {
         let repository_path = request.into_inner().path;
-        let state = repo_state(repository_path.clone());
+        let state;
+        match repo_state(repository_path.clone()) {
+            Ok(local_state) => {
+                state = local_state;
+            }
+            Err(err) => return Err(Status::internal(err)),
+        }
 
         let (local_tx, mut local_rx) = mpsc::channel(1);
         let (tx, rx) = mpsc::channel(128);
@@ -88,11 +91,16 @@ impl Repo for RemoteRepository {
 
         tokio::task::spawn(async move {
             let _watcher = watcher;
-            while let Some(Ok(file)) = local_rx.recv().await {
-                let new_state = repo_state("./".to_string());
-                send_message(tx.clone(), new_state);
+            while let Some(Ok(_)) = local_rx.recv().await {
+                match repo_state(repository_path.clone()) {
+                    Ok(new_state) => {
+                        send_message(tx.clone(), new_state);
+                    }
+                    Err(err) => { Err(Status::internal(err)) }.unwrap(),
+                };
             }
         });
+
         let output_stream = ReceiverStream::new(rx);
         Ok(Response::new(Box::pin(output_stream) as Self::StatusStream))
     }
@@ -100,7 +108,7 @@ impl Repo for RemoteRepository {
     async fn set_current_version(
         &self,
         request: Request<Version>,
-    ) -> Result<Response<ResponseResult>, Status> {
+    ) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
 
         let repository_path = inner.path;
@@ -108,22 +116,17 @@ impl Repo for RemoteRepository {
 
         let version_string = CleanName::new(inner.version).unwrap();
 
-        let mut reply = ResponseResult { error: "".to_string() };
+        let reply = Empty {};
         match repo.set_current_version(&version_string) {
-            Ok(_) => (),
-            Err(value) => reply = ResponseResult { error: value.to_string() },
+            Ok(_) => Ok(Response::new(reply)),
+            Err(err) => Err(Status::internal(err.to_string())),
         }
-        Ok(Response::new(reply))
     }
 
-    async fn register_version(
-        &self,
-        request: Request<Version>,
-    ) -> Result<Response<ResponseResult>, Status> {
+    async fn register_version(&self, request: Request<Version>) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
         let repo = Repository::new(PathBuf::from(repository_path));
-        let mut reply = ResponseResult { error: "".to_string() };
         let version_string = CleanName::new(inner.version).unwrap();
 
         let description: Option<String> = None; // = inner.description;
@@ -142,67 +145,108 @@ impl Repo for RemoteRepository {
             (Some(_), Some(_)) => "foo".to_string(),
         };
         let version = v1::Version { revision: version_string, description };
+        let reply = Empty {};
         match repo.register_version(&version) {
-            Ok(_) => (),
-            Err(value) => reply = ResponseResult { error: value.to_string() },
+            Ok(_) => Ok(Response::new(reply)),
+            Err(err) => Err(Status::internal(err.to_string())),
         }
-
-        Ok(Response::new(reply))
     }
     async fn unregister_version(
         &self,
         request: Request<Version>,
-    ) -> Result<Response<ResponseResult>, Status> {
+    ) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
         let repo = Repository::new(PathBuf::from(repository_path));
-        let mut reply = ResponseResult { error: "".to_string() };
         let version_string = CleanName::new(inner.version).unwrap();
+        let reply = Empty {};
         match repo.unregister_version(&version_string) {
-            Ok(_) => (),
-            Err(value) => reply = ResponseResult { error: value.to_string() },
+            Ok(_) => Ok(Response::new(reply)),
+            Err(err) => Err(Status::internal(err.to_string())),
         }
-        Ok(Response::new(reply))
     }
 
-    async fn register_package(
-        &self,
-        request: Request<Package>,
-    ) -> Result<Response<ResponseResult>, Status> {
+    async fn register_package(&self, request: Request<Package>) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
         let package = ".build/".to_owned() + &inner.name + ".metadata";
         let repo = Repository::new(PathBuf::from(repository_path));
-        let mut reply = ResponseResult { error: "".to_string() };
+        let reply = Empty {};
         match repo.register_package(package.as_str()) {
-            Ok(_) => (),
-            Err(value) => reply = ResponseResult { error: value.to_string() },
+            Ok(_) => Ok(Response::new(reply)),
+            Err(err) => Err(Status::internal(err.to_string())),
         }
-        Ok(Response::new(reply))
     }
 
     async fn unregister_package(
         &self,
         request: Request<Package>,
-    ) -> Result<Response<ResponseResult>, Status> {
+    ) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
         let package = ".build/".to_owned() + &inner.name + ".metadata";
         let repo = Repository::new(PathBuf::from(repository_path));
-        let mut reply = ResponseResult { error: "".to_string() };
+        let reply = Empty {};
         match repo.unregister_package(package.as_str()) {
-            Ok(_) => (),
-            Err(value) => reply = ResponseResult { error: value.to_string() },
+            Ok(_) => Ok(Response::new(reply)),
+            Err(err) => Err(Status::internal(err.to_string())),
         }
-        Ok(Response::new(reply))
+    }
+
+    async fn versions(
+        &self,
+        request: Request<RepositoryPath>,
+    ) -> Result<Response<ListPackVerBin>, Status> {
+        let inner = request.into_inner();
+        let repository_path = inner.path;
+        let repo = Repository::new(PathBuf::from(repository_path));
+        let mut list_versions: Vec<String> = Vec::new();
+        match repo.versions() {
+            Ok(ver) => {
+                for val in ver.iter() {
+                    list_versions.push(val.revision().to_string())
+                }
+                let reply = ListPackVerBin { ver_pack_bin: list_versions };
+                Ok(Response::new(reply))
+            }
+            Err(err) => Err(Status::internal(err.to_string())),
+        }
+    }
+
+    async fn packages(
+        &self,
+        request: Request<RepositoryPath>,
+    ) -> Result<Response<ListPackVerBin>, Status> {
+        let inner = request.into_inner();
+        let repository_path = inner.path;
+        let repo = Repository::new(PathBuf::from(repository_path));
+        let mut list_packages: Vec<String> = Vec::new();
+        match repo.packages() {
+            Ok(pack) => {
+                for val in pack.iter() {
+                    list_packages.push(val.package_data_name().to_string())
+                }
+                let reply = ListPackVerBin { ver_pack_bin: list_packages };
+                Ok(Response::new(reply))
+            }
+            Err(err) => Err(Status::internal(err.to_string())),
+        }
     }
 
     async fn available_packages(
         &self,
         request: Request<RepositoryPath>,
-    ) -> Result<Response<ResponseResult>, Status> {
-        let mut reply = ResponseResult { error: "".to_string() };
-        Ok(Response::new(reply))
+    ) -> Result<Response<ListPackVerBin>, Status> {
+        let inner = request.into_inner();
+        let repository_path = inner.path;
+        let repo = Repository::new(PathBuf::from(repository_path));
+        match repo.available_packages(".build".to_string()) {
+            Ok(pack) => {
+                let reply = ListPackVerBin { ver_pack_bin: pack };
+                Ok(Response::new(reply))
+            }
+            Err(err) => Err(Status::internal(err.to_string())),
+        }
     }
 
     async fn build_package(
@@ -292,32 +336,27 @@ impl Repo for RemoteRepository {
         Ok(Response::new(reply))
     }
 
-    async fn delete_file(
-        &self,
-        request: Request<FileToDelete>,
-    ) -> Result<Response<ResponseResult>, Status> {
+    async fn delete_file(&self, request: Request<FileToDelete>) -> Result<Response<Empty>, Status> {
         let file = request.into_inner().file;
-        let mut error: String = "".to_string();
         if let Err(err) = fs::remove_file(".build/".to_owned() + &file) {
-            error = err.to_string();
+            return Err(Status::internal(err.to_string()));
         }
         if let Err(err) = fs::remove_file(".build/".to_owned() + &file + ".metadata") {
-            error = err.to_string();
+            return Err(Status::internal(err.to_string()));
         }
-        let mut reply = ResponseResult { error: error };
+        let reply = Empty {};
         Ok(Response::new(reply))
     }
 }
 
-fn repo_state(path: String) -> StatusResult {
+fn repo_state(path: String) -> Result<RepoStatus, String> {
     let repo = Repository::new(PathBuf::from(path));
     let current_version;
-    let mut repoinit = false;
     match repo.current_version() {
         Ok(value) => current_version = value.version().to_string(),
         Err(error) => {
             if error.kind() == ErrorKind::NotFound {
-                repoinit = false;
+                return Err(error.to_string());
             }
             current_version = "-".to_string();
         }
@@ -328,14 +367,10 @@ fn repo_state(path: String) -> StatusResult {
             for val in value.iter() {
                 list_versions.push(val.revision().to_string())
             }
-            repoinit = true;
         }
-        Err(error) => {
-            if error.kind() == ErrorKind::NotFound {
-                repoinit = false;
-            }
-        }
+        Err(error) => return Err(error.to_string()),
     }
+
     let mut list_packages = Vec::new();
     let mut size = 0;
     match repo.packages() {
@@ -345,27 +380,34 @@ fn repo_state(path: String) -> StatusResult {
             }
             size = value.iter().map(|p| p.size()).sum::<u64>();
         }
-        Err(error) => {
-            if error.kind() == ErrorKind::NotFound {
-                repoinit = false;
-            }
-        }
+        Err(error) => return Err(error.to_string()),
     };
 
-    let available_packages = repo.available_packages(".build".to_string()).unwrap();
+    let available_packages;
+    match repo.available_packages(".build".to_string()) {
+        Ok(pack) => {
+            available_packages = pack;
+        }
+        Err(err) => return Err(err.to_string()),
+    };
 
     let mut available_binaries = Vec::new();
     let binaries_folder = Path::new("uploads");
-    for entry in fs::read_dir(binaries_folder).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if path.is_dir() {
-            available_binaries.push(path.file_name().unwrap().to_str().unwrap().to_string());
+    match fs::read_dir(binaries_folder) {
+        Ok(dir) => {
+            for entry in dir {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if path.is_dir() {
+                    available_binaries
+                        .push(path.file_name().unwrap().to_str().unwrap().to_string());
+                }
+            }
         }
+        Err(err) => return Err(err.to_string()),
     }
 
-    let reply = StatusResult {
-        repoinit: repoinit,
+    let state = RepoStatus {
         size: size,
         current_version: current_version,
         versions: list_versions,
@@ -374,13 +416,10 @@ fn repo_state(path: String) -> StatusResult {
         available_binaries: available_binaries,
     };
 
-    return reply;
+    return Ok(state);
 }
 
-fn send_message(
-    tx: tokio::sync::mpsc::Sender<Result<StatusResult, Status>>,
-    message: StatusResult,
-) {
+fn send_message(tx: tokio::sync::mpsc::Sender<Result<RepoStatus, Status>>, message: RepoStatus) {
     tokio::spawn(async move {
         let _ = tx.send(Result::<_, Status>::Ok(message)).await;
     });

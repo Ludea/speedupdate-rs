@@ -3,15 +3,17 @@ syntax = "proto3";
 package speedupdate;
 
 service Repo {
-  rpc Init (RepositoryPath) returns (ResponseResult);
-  rpc Status (RepositoryPath) returns (stream StatusResult);
-  rpc Set_current_version (Version) returns (ResponseResult);
-  rpc Register_version (Version) returns (ResponseResult);
-  rpc Unregister_version (Version) returns (ResponseResult);
-  rpc Register_package (Package) returns (ResponseResult);
-  rpc Unregister_package (Package) returns (ResponseResult);
-  rpc Available_packages (RepositoryPath) returns (ResponseResult);
-  rpc Delete_file (FileToDelete) returns (ResponseResult);
+  rpc Init (RepositoryPath) returns (Empty);
+  rpc Status (RepositoryPath) returns (stream RepoStatus);
+  rpc Set_current_version (Version) returns (Empty);
+  rpc Register_version (Version) returns (Empty);
+  rpc Unregister_version (Version) returns (Empty);
+  rpc Register_package (Package) returns (Empty);
+  rpc Unregister_package (Package) returns (Empty);
+  rpc Versions (RepositoryPath) returns (ListPackVerBin);
+  rpc Packages (RepositoryPath) returns (ListPackVerBin);
+  rpc Available_packages (RepositoryPath) returns (ListPackVerBin);
+  rpc Delete_file (FileToDelete) returns (Empty);
   rpc Build_package (BuildInput) returns (BuildOutput);
 }
 
@@ -23,18 +25,13 @@ message FileToDelete {
   string file = 1;
 }
 
-message StatusResult {
-  bool repoinit = 1;
-  string current_version = 2 ;
-  repeated string versions = 3;
-  repeated string packages = 4;
-  repeated string available_packages = 5;
-  repeated string available_binaries = 6;
-  uint64 size = 7; 
-}
-
-message ResponseResult {
-  string error = 1 ;
+message RepoStatus {
+  string current_version = 1;
+  repeated string versions = 2;
+  repeated string packages = 3;
+  repeated string available_packages = 4;
+  repeated string available_binaries = 5;
+  uint64 size = 6; 
 }
 
 message Version {
@@ -47,6 +44,9 @@ message Package {
   string name = 2;
 }
 
+message ListPackVerBin {
+  repeated string ver_pack_bin = 1;
+}
 message BuildInput {
   string path = 1;
   string version = 2;
@@ -62,3 +62,5 @@ message BuildInput {
 message BuildOutput {
   string error = 1;
 }
+
+message Empty {}
