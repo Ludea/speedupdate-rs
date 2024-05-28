@@ -1,5 +1,5 @@
-use std::{env, fs, path::PathBuf};
 use protox::prost::Message;
+use std::{env, fs, path::PathBuf};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file_descriptors = protox::compile(["proto/speedupdate.proto"], ["."]).unwrap();
@@ -11,12 +11,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = prost_build::Config::new();
     config.protoc_arg("--experimental_allow_proto3_optional");
     tonic_build::configure()
-	.skip_protoc_run()
+        .skip_protoc_run()
         .file_descriptor_set_path(&file_descriptor_path)
-	.compile_with_config(
-        config,
-        &["proto/speedupdate.proto"],
-        &["proto"],
-    )?;
+        .compile_with_config(config, &["proto/speedupdate.proto"], &["proto"])?;
     Ok(())
 }

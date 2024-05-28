@@ -1,7 +1,7 @@
 use self::multiplex_service::MultiplexService;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-mod ftp;
+//mod ftp;
 mod http;
 mod multiplex_service;
 mod rpc;
