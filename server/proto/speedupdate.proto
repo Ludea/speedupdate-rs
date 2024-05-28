@@ -6,6 +6,7 @@ service Repo {
   rpc Init (RepositoryPath) returns (Empty);
   rpc Status (RepositoryPath) returns (stream RepoStatus);
   rpc Set_current_version (Version) returns (Empty);
+  rpc Get_current_version (RepositoryPath) returns (CurrentVersion);
   rpc Register_version (Version) returns (Empty);
   rpc Unregister_version (Version) returns (Empty);
   rpc Register_package (Package) returns (Empty);
@@ -37,6 +38,10 @@ message RepoStatus {
 message Version {
   string path = 1;
   string version = 2;
+}
+
+message CurrentVersion {
+  string version = 1;
 }
 
 message Package {

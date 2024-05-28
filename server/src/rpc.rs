@@ -8,8 +8,8 @@ use libspeedupdate::{
 use notify::{Config, RecursiveMode, Watcher};
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
-    BuildInput, BuildOutput, Empty, FileToDelete, ListPackVerBin, Package, RepoStatus,
-    RepositoryPath, Version,
+    BuildInput, BuildOutput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Package,
+    RepoStatus, RepositoryPath, Version,
 };
 use std::{
     fs,
@@ -22,6 +22,7 @@ use std::{
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
+    codec::CompressionEncoding,
     metadata::MetadataValue,
     transport::{server::Router, Server},
     Request, Response, Status,
@@ -103,6 +104,23 @@ impl Repo for RemoteRepository {
 
         let output_stream = ReceiverStream::new(rx);
         Ok(Response::new(Box::pin(output_stream) as Self::StatusStream))
+    }
+
+    async fn get_current_version(
+        &self,
+        request: Request<RepositoryPath>,
+    ) -> Result<Response<CurrentVersion>, Status> {
+        let inner = request.into_inner();
+
+        let repository_path = inner.path;
+        let mut repo = Repository::new(PathBuf::from(repository_path));
+        match repo.current_version() {
+            Ok(version) => {
+                let reply = CurrentVersion { version: version.version().to_string() };
+                Ok(Response::new(reply))
+            }
+            Err(err) => Err(Status::internal(err.to_string())),
+        }
     }
 
     async fn set_current_version(
@@ -351,6 +369,17 @@ impl Repo for RemoteRepository {
 
 fn repo_state(path: String) -> Result<RepoStatus, String> {
     let repo = Repository::new(PathBuf::from(path));
+
+    let mut list_versions: Vec<String> = Vec::new();
+    match repo.versions() {
+        Ok(value) => {
+            for val in value.iter() {
+                list_versions.push(val.revision().to_string())
+            }
+        }
+        Err(error) => return Err(error.to_string()),
+    }
+
     let current_version;
     match repo.current_version() {
         Ok(value) => current_version = value.version().to_string(),
@@ -360,15 +389,6 @@ fn repo_state(path: String) -> Result<RepoStatus, String> {
             }
             current_version = "-".to_string();
         }
-    }
-    let mut list_versions: Vec<String> = Vec::new();
-    match repo.versions() {
-        Ok(value) => {
-            for val in value.iter() {
-                list_versions.push(val.revision().to_string())
-            }
-        }
-        Err(error) => return Err(error.to_string()),
     }
 
     let mut list_packages = Vec::new();
@@ -427,7 +447,10 @@ fn send_message(tx: tokio::sync::mpsc::Sender<Result<RepoStatus, Status>>, messa
 
 pub fn rpc_api() -> Router<Stack<GrpcWebLayer, Stack<CorsLayer, tower::layer::util::Identity>>> {
     let repo = RemoteRepository {};
-    let svc = RepoServer::new(repo); //with_interceptor(repo, check_auth);;
+    let svc = RepoServer::new(repo)
+        .send_compressed(CompressionEncoding::Gzip)
+        .accept_compressed(CompressionEncoding::Gzip);
+    //with_interceptor(repo, check_auth);;
 
     let cors_layer = CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any);
 
