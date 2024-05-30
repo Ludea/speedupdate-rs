@@ -227,7 +227,7 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
             None => unreachable!(),
         };
 
-        let state = state.lock();
+        let state = state.borrow();
         let progress = state.histogram.progress();
 
         let res = if matches.get_flag("no_progress") {
@@ -264,7 +264,7 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
 
             let res = update_stream
                 .try_for_each(|state| {
-                    let state = state.lock();
+                    let state = state.borrow();
                     let progress = state.histogram.progress();
                     dl_bytes.set_position(progress.downloaded_bytes);
                     dl_bytes.set_length(state.download_bytes);

@@ -147,7 +147,7 @@ pub async fn do_update(
         }
     };
 
-    let state = state.lock();
+    let state = state.borrow();
     let progress = state.histogram.progress();
 
     println!("Target revision: {}", state.target_revision);
@@ -188,7 +188,7 @@ pub async fn do_update(
 
         let res = stream
             .try_for_each(|state| {
-                let state = state.lock();
+                let state = state.borrow();
                 let progress = state.histogram.progress();
                 dl_bytes.set_position(progress.downloaded_bytes);
                 dl_bytes.set_length(state.download_bytes);

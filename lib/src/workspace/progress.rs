@@ -9,7 +9,7 @@ use std::cell::{Ref, RefCell, RefMut};
 use std::fmt;
 use std::ops::{Add, AddAssign, Div, Sub, SubAssign};
 use std::rc::Rc;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct SharedCheckProgress {
@@ -125,16 +125,20 @@ impl CheckProgress {
 
 #[derive(Clone)]
 pub struct SharedUpdateProgress {
-    state: Arc<Mutex<UpdateProgress>>,
+    state: Rc<RefCell<UpdateProgress>>,
 }
 
 impl SharedUpdateProgress {
     pub fn new(target_revision: CleanName) -> Self {
-        Self { state: Arc::new(Mutex::new(UpdateProgress::new(target_revision))) }
+        Self { state: Rc::new(RefCell::new(UpdateProgress::new(target_revision))) }
     }
 
-    pub fn lock(&self) -> MutexGuard<'_, UpdateProgress> {
-        self.state.lock().unwrap()
+    pub fn borrow(&self) -> Ref<'_, UpdateProgress> {
+        self.state.borrow()
+    }
+
+    pub(crate) fn borrow_mut(&self) -> RefMut<'_, UpdateProgress> {
+        self.state.borrow_mut()
     }
 }
 

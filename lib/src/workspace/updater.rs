@@ -161,7 +161,7 @@ impl<'a> Stream for UpdatePackageStream<'a> {
                 if let Poll::Ready(Some(Ok(download_progress))) = download_poll {
                     this.state.borrow_mut().available = download_progress.available;
 
-                    let mut state = this.shared_state.lock();
+                    let mut state = this.shared_state.borrow_mut();
                     state.downloading_operation_idx = download_progress.available.operation_idx;
                     delta.downloaded_files = download_progress.delta_downloaded_files;
                     delta.downloaded_bytes = download_progress.delta_downloaded_bytes;
@@ -172,7 +172,7 @@ impl<'a> Stream for UpdatePackageStream<'a> {
                         Ok(apply_progress) => {
                             this.state.borrow_mut().applied.operation_idx =
                                 apply_progress.operation_idx;
-                            let mut state = this.shared_state.lock();
+                            let mut state = this.shared_state.borrow_mut();
                             state.applying_operation_idx = apply_progress.operation_idx;
                             delta.applied_files = apply_progress.delta_applied_files;
                             delta.applied_input_bytes = apply_progress.delta_input_bytes;
@@ -195,7 +195,7 @@ impl<'a> Stream for UpdatePackageStream<'a> {
                 }
 
                 {
-                    let mut state = this.shared_state.lock();
+                    let mut state = this.shared_state.borrow_mut();
                     state.inc_progress(delta);
                 }
 
@@ -310,7 +310,7 @@ where
         if state.check_only {
             return Ok(());
         }
-        let global_progression = global_progression_nr.lock();
+        let global_progression = global_progression_nr.borrow();
         let state = if state.failures.is_empty()
             && global_progression.applying_package_idx == global_progression.steps.len()
         {
@@ -346,7 +346,7 @@ where
         };
         if !failures.is_empty() {
             failures.sort();
-            global_progression_r.lock().stage = UpdateStage::FindingRepairPath;
+            global_progression_r.borrow_mut().stage = UpdateStage::FindingRepairPath;
             Either::Left(
                 update_internal(
                     update_options_r,
@@ -378,11 +378,11 @@ where
         state.previous_failures = Vec::new();
         let last_res = if state.failures.is_empty() {
             info!("update to {} succeeded", goal_version);
-            global_progression_c.lock().stage = UpdateStage::Uptodate;
+            global_progression_c.borrow_mut().stage = UpdateStage::Uptodate;
             Ok(global_progression_c.clone())
         } else {
             error!("update to {} failed", goal_version);
-            global_progression_c.lock().stage = UpdateStage::Failed;
+            global_progression_c.borrow_mut().stage = UpdateStage::Failed;
             let err = UpdateError::Failed { files: state.failures.len() };
             Err(err)
         };
@@ -456,7 +456,11 @@ where
     let packages_metadata = match maybe_path {
         Some((packages_metadata, first_package_state)) => {
             // Update global progress with objectives
-            global_progression.lock().push_steps(&packages_metadata, &first_package_state, &filter);
+            global_progression.borrow_mut().push_steps(
+                &packages_metadata,
+                &first_package_state,
+                &filter,
+            );
 
             // Setup shared workspace state
             shared_state.borrow_mut().update_with(first_package_state);
@@ -467,7 +471,7 @@ where
     };
 
     {
-        global_progression.lock().stage = main_stage;
+        global_progression.borrow_mut().stage = main_stage;
     }
 
     let state_p = shared_state.clone();
@@ -532,7 +536,7 @@ where
             let state = &mut *state_c.borrow_mut();
             state.available = UpdatePosition::new();
             state.applied = UpdatePosition::new();
-            global_progression_c.lock().inc_package();
+            global_progression_c.borrow_mut().inc_package();
             stream::empty()
         })
         .flatten_stream();

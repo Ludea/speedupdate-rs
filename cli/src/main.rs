@@ -111,6 +111,7 @@ async fn main() {
         .subcommand(
             Command::new("repository")
                 .about("Manage repository")
+                .arg_required_else_help(true)
                 .arg(
                     Arg::new("repository")
                         .short('p')

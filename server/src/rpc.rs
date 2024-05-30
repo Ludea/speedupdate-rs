@@ -52,6 +52,18 @@ impl Repo for RemoteRepository {
         }
     }
 
+    async fn is_init(&self, request: Request<RepositoryPath>) -> Result<Response<Empty>, Status> {
+        let repository_path = request.into_inner().path;
+        let package_file = repository_path + "packages";
+        let package_file_path = Path::new(&package_file);
+        if package_file_path.exists() {
+            let reply = Empty {};
+            Ok(Response::new(reply))
+        } else {
+            Err(Status::internal("Repo nlt initilalized"))
+        }
+    }
+
     type StatusStream = ResponseStream;
 
     async fn status(
@@ -113,7 +125,7 @@ impl Repo for RemoteRepository {
         let inner = request.into_inner();
 
         let repository_path = inner.path;
-        let mut repo = Repository::new(PathBuf::from(repository_path));
+        let repo = Repository::new(PathBuf::from(repository_path));
         match repo.current_version() {
             Ok(version) => {
                 let reply = CurrentVersion { version: version.version().to_string() };
