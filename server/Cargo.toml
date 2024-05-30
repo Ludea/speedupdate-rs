@@ -33,7 +33,7 @@ tracing-subscriber = { version = "0.3", features = ["tracing-log", "env-filter"]
 hyper = "0.14"
 http = "1.1.0"
 tower = { version = "0.4", features = ["full"] }
-notify = { version = "6", default-features = false }
+notify = { version = "6", default-features = false, features = ["macos_fsevent"] }
 console-subscriber = "0.2.0"
 
 [build-dependencies]
