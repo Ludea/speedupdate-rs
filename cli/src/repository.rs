@@ -303,7 +303,7 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
 
     let mut build_stream = builder.build();
 
-    let state = match build_stream.next().await {
+    /*    let state = match build_stream.next().await {
         Some(Ok(state)) => state,
         Some(Err(err)) => {
             error!("build failed: {}", err);
@@ -362,7 +362,7 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
     if let Err(err) = res {
         error!("build failed: {}", err);
         std::process::exit(1)
-    }
+    }*/
 
     info!("package `{}` built", builder.package_metadata_name());
 

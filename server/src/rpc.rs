@@ -71,13 +71,10 @@ impl Repo for RemoteRepository {
         request: Request<RepositoryPath>,
     ) -> Result<Response<Self::StatusStream>, Status> {
         let repository_path = request.into_inner().path;
-        let state;
-        match repo_state(repository_path.clone()) {
-            Ok(local_state) => {
-                state = local_state;
-            }
+        let state = match repo_state(repository_path.clone()) {
+            Ok(local_state) => local_state,
             Err(err) => return Err(Status::internal(err)),
-        }
+        };
 
         let (local_tx, mut local_rx) = mpsc::channel(1);
         let (tx, rx) = mpsc::channel(128);
@@ -392,16 +389,15 @@ fn repo_state(path: String) -> Result<RepoStatus, String> {
         Err(error) => return Err(error.to_string()),
     }
 
-    let current_version;
-    match repo.current_version() {
-        Ok(value) => current_version = value.version().to_string(),
+    let current_version = match repo.current_version() {
+        Ok(value) => value.version().to_string(),
         Err(error) => {
             if error.kind() == ErrorKind::NotFound {
                 return Err(error.to_string());
             }
-            current_version = "-".to_string();
+            "-".to_string()
         }
-    }
+    };
 
     let mut list_packages = Vec::new();
     let mut size = 0;
@@ -415,11 +411,8 @@ fn repo_state(path: String) -> Result<RepoStatus, String> {
         Err(error) => return Err(error.to_string()),
     };
 
-    let available_packages;
-    match repo.available_packages(".build".to_string()) {
-        Ok(pack) => {
-            available_packages = pack;
-        }
+    let available_packages = match repo.available_packages(".build".to_string()) {
+        Ok(pack) => pack,
         Err(err) => return Err(err.to_string()),
     };
 
@@ -440,15 +433,15 @@ fn repo_state(path: String) -> Result<RepoStatus, String> {
     }
 
     let state = RepoStatus {
-        size: size,
-        current_version: current_version,
+        size,
+        current_version,
         versions: list_versions,
         packages: list_packages,
-        available_packages: available_packages,
-        available_binaries: available_binaries,
+        available_packages,
+        available_binaries,
     };
 
-    return Ok(state);
+    Ok(state)
 }
 
 fn send_message(tx: tokio::sync::mpsc::Sender<Result<RepoStatus, Status>>, message: RepoStatus) {
