@@ -4,7 +4,7 @@ package speedupdate;
 
 service Repo {
   rpc Init (RepositoryPath) returns (Empty);
-  rpc IsInit (RepositoryPath) returns (Empty);
+  rpc Is_init (RepositoryPath) returns (Empty);
   rpc Status (RepositoryPath) returns (stream RepoStatus);
   rpc Set_current_version (Version) returns (Empty);
   rpc Get_current_version (RepositoryPath) returns (CurrentVersion);

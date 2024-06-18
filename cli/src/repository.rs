@@ -303,7 +303,7 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
 
     let mut build_stream = builder.build();
 
-    /*    let state = match build_stream.next().await {
+    let state = match build_stream.next().await {
         Some(Ok(state)) => state,
         Some(Err(err)) => {
             error!("build failed: {}", err);
@@ -312,7 +312,7 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
         None => unreachable!(),
     };
 
-    let state = state.borrow();
+    /*let state = state.borrow();
     let res = if matches.get_flag("no_progress") {
         build_stream.try_for_each(|_state| future::ready(Ok(()))).await
     } else {

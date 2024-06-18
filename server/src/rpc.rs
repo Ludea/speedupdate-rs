@@ -24,6 +24,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
     codec::CompressionEncoding,
     metadata::MetadataValue,
+    service::interceptor::InterceptorLayer,
     transport::{server::Router, Server},
     Request, Response, Status,
 };
@@ -60,7 +61,7 @@ impl Repo for RemoteRepository {
             let reply = Empty {};
             Ok(Response::new(reply))
         } else {
-            Err(Status::internal("Repo nlt initilalized"))
+            Err(Status::internal("Repo not initilalized"))
         }
     }
 
@@ -452,10 +453,9 @@ fn send_message(tx: tokio::sync::mpsc::Sender<Result<RepoStatus, Status>>, messa
 
 pub fn rpc_api() -> Router<Stack<GrpcWebLayer, Stack<CorsLayer, tower::layer::util::Identity>>> {
     let repo = RemoteRepository {};
-    let svc = RepoServer::new(repo)
-        .send_compressed(CompressionEncoding::Gzip)
-        .accept_compressed(CompressionEncoding::Gzip);
-    //with_interceptor(repo, check_auth);;
+    let svc = RepoServer::with_interceptor(repo, check_auth);
+    //.send_compressed(CompressionEncoding::Gzip)
+    //.accept_compressed(CompressionEncoding::Gzip);
 
     let cors_layer = CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any);
 
@@ -467,10 +467,13 @@ pub fn rpc_api() -> Router<Stack<GrpcWebLayer, Stack<CorsLayer, tower::layer::ut
 }
 
 fn check_auth(req: Request<()>) -> Result<Request<()>, Status> {
-    let token: MetadataValue<_> = "Bearer some-secret-token".parse().unwrap();
+    let token: MetadataValue<_> = "Bearer allo".parse().unwrap();
 
     match req.metadata().get("authorization") {
-        Some(t) if token == t => Ok(req),
+        Some(t) => {
+            println!("{:?}", t.to_str().unwrap().replace("Bearer ", ""));
+            Ok(req)
+        }
         _ => Err(Status::unauthenticated("No valid auth token")),
     }
 }
