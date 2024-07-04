@@ -1,7 +1,7 @@
 use axum::{
     body::Bytes,
-    extract::{MatchedPath, Multipart},
-    http::{Request, StatusCode},
+    extract::{MatchedPath, Multipart, Request},
+    http::StatusCode,
     middleware::{self, Next},
     response::IntoResponse,
     routing::{get, post},
@@ -32,9 +32,9 @@ async fn start_metrics_server() {
     let app = metrics_app();
 
     // NOTE: expose metrics enpoint on a different port
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
-    tracing::info!("HTTP metric server listening on {}", addr);
-    axum::Server::bind(&addr).serve(app.into_make_service()).await.unwrap()
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3001").await.unwrap();
+    tracing::info!("HTTP metric server listening on {}", listener.local_addr().unwrap());
+    axum::serve(listener, app).await.unwrap()
 }
 
 fn setup_metrics_recorder() -> PrometheusHandle {
@@ -65,7 +65,7 @@ pub async fn http_api() -> Router {
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
 }
 
-async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
+async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
     let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
         matched_path.as_str().to_owned()
     } else {

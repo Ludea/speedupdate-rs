@@ -6,6 +6,7 @@ use libspeedupdate::{
     Repository,
 };
 use notify::{Config, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
     BuildInput, BuildOutput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Package,
@@ -13,15 +14,23 @@ use speedupdaterpc::{
 };
 use std::{
     fs,
-    io::ErrorKind,
+    io::{ErrorKind, Cursor},
     path::{Path, PathBuf},
     pin::Pin,
+    task::{Context, Poll},
     time::Duration,
 };
 
+use base64::{engine::general_purpose, Engine as _};
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use ring::{
+    rand,
+    signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED},
+};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{
+    body::BoxBody,
     codec::CompressionEncoding,
     metadata::MetadataValue,
     service::interceptor::InterceptorLayer,
@@ -29,11 +38,22 @@ use tonic::{
     Request, Response, Status,
 };
 use tonic_web::GrpcWebLayer;
-use tower::layer::util::Stack;
+use tower::{layer::util::Stack, timeout::TimeoutLayer, Layer, Service};
 use tower_http::cors::{Any, CorsLayer};
+use http_body_util::BodyExt;
+use http_body_util::combinators::UnsyncBoxBody;
+use http_body_util::Full;
 
 pub mod speedupdaterpc {
     tonic::include_proto!("speedupdate");
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Claims {
+    sub: String,
+    email: String,
+    exp: u64,
+    scope: String,
 }
 
 type ResponseStream = Pin<Box<dyn Stream<Item = Result<RepoStatus, Status>> + Send>>;
@@ -451,7 +471,15 @@ fn send_message(tx: tokio::sync::mpsc::Sender<Result<RepoStatus, Status>>, messa
     });
 }
 
-pub fn rpc_api() -> Router<Stack<GrpcWebLayer, Stack<CorsLayer, tower::layer::util::Identity>>> {
+pub fn rpc_api() -> Router<
+    Stack<
+        GrpcWebLayer,
+        Stack<
+            Stack<MyMiddlewareLayer, Stack<TimeoutLayer, tower::layer::util::Identity>>,
+            Stack<CorsLayer, tower::layer::util::Identity>,
+        >,
+    >,
+> {
     let repo = RemoteRepository {};
     let svc = RepoServer::with_interceptor(repo, check_auth);
     //.send_compressed(CompressionEncoding::Gzip)
@@ -459,21 +487,98 @@ pub fn rpc_api() -> Router<Stack<GrpcWebLayer, Stack<CorsLayer, tower::layer::ut
 
     let cors_layer = CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any);
 
+    let layer = tower::ServiceBuilder::new()
+        .timeout(Duration::from_secs(30))
+        .layer(MyMiddlewareLayer::default())
+        .into_inner();
+
     Server::builder()
         .accept_http1(true)
         .layer(cors_layer)
+        .layer(layer)
         .layer(GrpcWebLayer::new())
         .add_service(svc)
 }
 
 fn check_auth(req: Request<()>) -> Result<Request<()>, Status> {
-    let token: MetadataValue<_> = "Bearer allo".parse().unwrap();
+    let encoded_pkcs8 = fs::read_to_string("pkey").unwrap();
+    let decoded_pkcs8 = general_purpose::STANDARD.decode(encoded_pkcs8).unwrap();
+    let rng = &rand::SystemRandom::new();
+    let pair = EcdsaKeyPair::from_pkcs8(
+        &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
+        &decoded_pkcs8,
+        rng,
+    )
+    .unwrap();
+    let decoding_key = &DecodingKey::from_ec_der(pair.public_key().as_ref());
 
     match req.metadata().get("authorization") {
         Some(t) => {
-            println!("{:?}", t.to_str().unwrap().replace("Bearer ", ""));
-            Ok(req)
+            let validation = &mut Validation::new(Algorithm::ES256);
+	    validation.validate_exp = false;
+            let t_string = t.to_str().unwrap().replace("Bearer ", "");
+	    match decode::<Claims>(&t_string, decoding_key, validation) {
+                Ok(token_data) => {
+                    //println!("12 : {:?}", req.into_inner().clone());
+                    //		if token_data.claims.scope {
+                     Ok(req)
+                    //		}
+                    //else {
+                    //Err(Status::unauthenticated("Not allowed"))
+                    //}
+                }
+                Err(err) => Err(Status::unauthenticated(err.to_string())),
+            }
         }
         _ => Err(Status::unauthenticated("No valid auth token")),
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MyMiddlewareLayer;
+
+impl<S> Layer<S> for MyMiddlewareLayer {
+    type Service = MyMiddleware<S>;
+
+    fn layer(&self, service: S) -> Self::Service {
+        MyMiddleware { inner: service }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MyMiddleware<S> {
+    inner: S,
+}
+
+type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
+
+impl<S> Service<hyper::Request<BoxBody>> for MyMiddleware<S>
+where
+    S: Service<hyper::Request<BoxBody>, Response = hyper::Response<BoxBody>>
+        + Clone
+        + Send
+        + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: hyper::Request<BoxBody>) -> Self::Future {
+        let clone = self.inner.clone();
+        let mut inner = std::mem::replace(&mut self.inner, clone);
+
+        Box::pin(async move {
+            let (parts, body) = req.into_parts();
+//	let content = body.collect().await.unwrap().to_bytes();
+//         println!("body : {:?}", content);
+//	let body = UnsyncBoxBody::new(String::from_utf8(content.to_vec()).unwrap());
+            let response = inner.call(hyper::Request::from_parts(parts, body)).await?;
+            Ok(response)
+        })
     }
 }
