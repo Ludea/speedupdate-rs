@@ -12,7 +12,7 @@ Speedupdate api
 anyhow = "1.0.66"
 axum = { version = "0.7", features = ["multipart"] }
 futures = { version = "0.3", default-features = false }
-instant-acme = "0.4.0"
+instant-acme = "0.7.0"
 libunftp = "0.20"
 unftp-sbe-fs = "0.2"
 pretty_env_logger = "0.5"
