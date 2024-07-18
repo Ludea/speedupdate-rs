@@ -1,6 +1,6 @@
 FROM --platform=$BUILDPLATFORM messense/rust-musl-cross:x86_64-musl as amd64
 RUN sudo apt update && \
-    apt install -y libssl-dev protobuf-compiler
+    apt install -y libssl-dev
 WORKDIR /opt/speedupdate
 COPY . .
 RUN cargo build --release --verbose 
@@ -8,7 +8,7 @@ RUN mv target/x86_64-unknown-linux-musl/release/speedupdateserver target/release
 
 FROM --platform=$BUILDPLATFORM messense/rust-musl-cross:aarch64-musl as arm64
 RUN sudo apt update && \
-    apt install -y libssl-dev protobuf-compiler
+    apt install -y libssl-dev
 WORKDIR /opt/speedupdate
 COPY . .
 RUN cargo build --release --verbose 
