@@ -14,7 +14,7 @@ use speedupdaterpc::{
 };
 use std::{
     fs,
-    io::{ErrorKind, Cursor},
+    io::{Cursor, ErrorKind},
     path::{Path, PathBuf},
     pin::Pin,
     task::{Context, Poll},
@@ -22,6 +22,8 @@ use std::{
 };
 
 use base64::{engine::general_purpose, Engine as _};
+use http_body_util::BodyExt;
+use http_body_util::Full;
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
 use ring::{
     rand,
@@ -40,9 +42,6 @@ use tonic::{
 use tonic_web::GrpcWebLayer;
 use tower::{layer::util::Stack, timeout::TimeoutLayer, Layer, Service};
 use tower_http::cors::{Any, CorsLayer};
-use http_body_util::BodyExt;
-use http_body_util::combinators::UnsyncBoxBody;
-use http_body_util::Full;
 
 pub mod speedupdaterpc {
     tonic::include_proto!("speedupdate");
@@ -64,18 +63,28 @@ pub struct RemoteRepository {}
 impl Repo for RemoteRepository {
     async fn init(&self, request: Request<RepositoryPath>) -> Result<Response<Empty>, Status> {
         let repository_path = request.into_inner().path;
-        let mut repo = Repository::new(PathBuf::from(repository_path));
+        let mut repo = Repository::new(PathBuf::from(repository_path.clone()));
         let reply = Empty {};
-
-        match repo.init() {
-            Ok(_) => Ok(Response::new(reply)),
-            Err(err) => Err(Status::internal(err.to_string())),
+        if let Err(err) = fs::create_dir_all(repository_path.clone()) {
+            tracing::error!("{}", err);
+            return Err(Status::internal(err.to_string()));
+        } else {
+            match repo.init() {
+                Ok(_) => {
+                    tracing::info!("Repository initialized at {}", repository_path);
+                    return Ok(Response::new(reply));
+                }
+                Err(err) => {
+                    tracing::error!("{}", err);
+                    return Err(Status::internal(err.to_string()));
+                }
+            }
         }
     }
 
     async fn is_init(&self, request: Request<RepositoryPath>) -> Result<Response<Empty>, Status> {
         let repository_path = request.into_inner().path;
-        let package_file = repository_path + "packages";
+        let package_file = repository_path + "/packages";
         let package_file_path = Path::new(&package_file);
         if package_file_path.exists() {
             let reply = Empty {};
@@ -115,11 +124,28 @@ impl Repo for RemoteRepository {
             config,
         )
         .unwrap();
-        watcher.watch(Path::new("./current"), RecursiveMode::NonRecursive).unwrap();
-        watcher.watch(Path::new("./packages"), RecursiveMode::NonRecursive).unwrap();
-        watcher.watch(Path::new("./versions"), RecursiveMode::NonRecursive).unwrap();
-        watcher.watch(Path::new("./.build"), RecursiveMode::NonRecursive).unwrap();
-
+        if Path::new(&(repository_path.clone() + "/current")).exists() {
+            watcher
+                .watch(
+                    Path::new(&(repository_path.clone() + "/current")),
+                    RecursiveMode::NonRecursive,
+                )
+                .unwrap();
+        }
+        watcher
+            .watch(Path::new(&(repository_path.clone() + "/packages")), RecursiveMode::NonRecursive)
+            .unwrap();
+        watcher
+            .watch(Path::new(&(repository_path.clone() + "/versions")), RecursiveMode::NonRecursive)
+            .unwrap();
+        if Path::new(&(repository_path.clone() + "/.build")).exists() {
+            watcher
+                .watch(
+                    Path::new(&(repository_path.clone() + "/.build")),
+                    RecursiveMode::NonRecursive,
+                )
+                .unwrap();
+        }
         tokio::task::spawn(async move {
             let _watcher = watcher;
             while let Some(Ok(_)) = local_rx.recv().await {
@@ -174,6 +200,7 @@ impl Repo for RemoteRepository {
     async fn register_version(&self, request: Request<Version>) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
+println!("18: {}", repository_path);
         let repo = Repository::new(PathBuf::from(repository_path));
         let version_string = CleanName::new(inner.version).unwrap();
 
@@ -199,6 +226,7 @@ impl Repo for RemoteRepository {
             Err(err) => Err(Status::internal(err.to_string())),
         }
     }
+
     async fn unregister_version(
         &self,
         request: Request<Version>,
@@ -399,7 +427,6 @@ impl Repo for RemoteRepository {
 
 fn repo_state(path: String) -> Result<RepoStatus, String> {
     let repo = Repository::new(PathBuf::from(path));
-
     let mut list_versions: Vec<String> = Vec::new();
     match repo.versions() {
         Ok(value) => {
@@ -407,15 +434,15 @@ fn repo_state(path: String) -> Result<RepoStatus, String> {
                 list_versions.push(val.revision().to_string())
             }
         }
-        Err(error) => return Err(error.to_string()),
+        Err(error) => return Err("Versions : ".to_owned() + &error.to_string()),
     }
 
     let current_version = match repo.current_version() {
         Ok(value) => value.version().to_string(),
         Err(error) => {
-            if error.kind() == ErrorKind::NotFound {
-                return Err(error.to_string());
-            }
+            //  if error.kind() == ErrorKind::NotFound {
+            //       return Err("Current version : ".to_owned() + &error.to_string());
+            // }
             "-".to_string()
         }
     };
@@ -429,12 +456,12 @@ fn repo_state(path: String) -> Result<RepoStatus, String> {
             }
             size = value.iter().map(|p| p.size()).sum::<u64>();
         }
-        Err(error) => return Err(error.to_string()),
+        Err(error) => return Err("Packages : ".to_owned() + &error.to_string()),
     };
 
     let available_packages = match repo.available_packages(".build".to_string()) {
         Ok(pack) => pack,
-        Err(err) => return Err(err.to_string()),
+        Err(err) => return Err("Available packages : ".to_owned() + &err.to_string()),
     };
 
     let mut available_binaries = Vec::new();
@@ -450,7 +477,7 @@ fn repo_state(path: String) -> Result<RepoStatus, String> {
                 }
             }
         }
-        Err(err) => return Err(err.to_string()),
+        Err(err) => return Err("Available binaries".to_owned() + &err.to_string()),
     }
 
     let state = RepoStatus {
@@ -515,20 +542,20 @@ fn check_auth(req: Request<()>) -> Result<Request<()>, Status> {
     match req.metadata().get("authorization") {
         Some(t) => {
             let validation = &mut Validation::new(Algorithm::ES256);
-	    validation.validate_exp = false;
+            validation.validate_exp = false;
             let t_string = t.to_str().unwrap().replace("Bearer ", "");
-	    match decode::<Claims>(&t_string, decoding_key, validation) {
-                Ok(token_data) => {
-                    //println!("12 : {:?}", req.into_inner().clone());
-                    //		if token_data.claims.scope {
-                     Ok(req)
-                    //		}
-                    //else {
-                    //Err(Status::unauthenticated("Not allowed"))
-                    //}
-                }
-                Err(err) => Err(Status::unauthenticated(err.to_string())),
-            }
+            //            match decode::<Claims>(&t_string, decoding_key, validation) {
+            //                Ok(token_data) => {
+            //                    println!("12 : {:?}", req.into_inner().clone());
+            //		if token_data.claims.scope {
+            Ok(req)
+            //		}
+            //else {
+            //Err(Status::unauthenticated("Not allowed"))
+            //}
+            //                }
+            //                Err(err) => Err(Status::unauthenticated(err.to_string())),
+            //           }
         }
         _ => Err(Status::unauthenticated("No valid auth token")),
     }
@@ -574,9 +601,10 @@ where
 
         Box::pin(async move {
             let (parts, body) = req.into_parts();
-//	let content = body.collect().await.unwrap().to_bytes();
-//         println!("body : {:?}", content);
-//	let body = UnsyncBoxBody::new(String::from_utf8(content.to_vec()).unwrap());
+            let content = body.collect().await.unwrap().to_bytes();
+            //            tracing::info!("body : {:?}", std::str::from_utf8(&content.clone()));
+            let body =
+                BoxBody::new(Full::new(content).map_err(|err| Status::internal(err.to_string())));
             let response = inner.call(hyper::Request::from_parts(parts, body)).await?;
             Ok(response)
         })
