@@ -43,7 +43,7 @@ http-body-util = "0.1.2"
 [build-dependencies]
 tonic-build = { version = "0.11.0", features = ["prost"] }
 prost-build = "0.12"
-protox = "0.6"
+protox = "0.7"
 
 [package.metadata.generate-rpm]
 assets = [
