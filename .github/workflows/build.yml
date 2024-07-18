@@ -29,10 +29,6 @@ jobs:
       - name: install deps
         if: matrix.platform == 'ubuntu-22.04' 
         run: sudo apt update && sudo apt install -y musl-dev musl-tools
-      - name: Install Protoc
-        uses: arduino/setup-protoc@master
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: 'Setup Rust on Windows and MacOS'
         if: matrix.platform != 'ubuntu-22.04' 
         uses: dtolnay/rust-toolchain@stable
