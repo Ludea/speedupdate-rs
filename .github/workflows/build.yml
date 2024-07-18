@@ -82,10 +82,6 @@ jobs:
     - run: git config --global --add safe.directory /__w/speedupdate-rs/speedupdate-rs 
     - name: Set outputs
       run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
-    - name: Install Protoc
-      uses: arduino/setup-protoc@master
-      with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
 #      - name: Clippy
 #        run: cargo clippy --all-targets --all-features -- -D warnings
 #      - name: Fmt
