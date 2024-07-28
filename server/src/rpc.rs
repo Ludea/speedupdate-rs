@@ -217,19 +217,15 @@ impl Repo for RemoteRepository {
         let repository_path = inner.path;
 
         let repo = Repository::new(PathBuf::from(repository_path.clone()));
-        let version_string;
-        match CleanName::new(inner.version) {
-            Ok(ver) => version_string = ver,
+        let version_string = match CleanName::new(inner.version) {
+            Ok(ver) => ver,
             Err(err) => {
                 return Err(Status::internal(err.to_string()));
             }
         };
 
         let description = inner.description;
-        let description = match description {
-            None => String::new(),
-            Some(desc) => desc,
-        };
+        let description = description.unwrap_or_default();
         let version = v1::Version { revision: version_string.clone(), description };
         let reply = Empty {};
         match repo.register_version(&version) {
@@ -464,13 +460,13 @@ fn repo_state(path: String) -> Result<RepoStatus, String> {
     };
 
     let mut list_packages = Vec::new();
-    let size;
-    match repo.packages() {
+
+    let size = match repo.packages() {
         Ok(value) => {
             for val in value.iter() {
                 list_packages.push(val.package_data_name().to_string());
             }
-            size = value.iter().map(|p| p.size()).sum::<u64>();
+            value.iter().map(|p| p.size()).sum::<u64>()
         }
         Err(error) => return Err("Packages : ".to_owned() + &error.to_string()),
     };
@@ -534,8 +530,7 @@ where
 
     select_task.await.unwrap()
 }
-
-pub fn rpc_api() -> Router<
+type RpcRouter = Router<
     Stack<
         GrpcWebLayer,
         Stack<
@@ -543,7 +538,9 @@ pub fn rpc_api() -> Router<
             Stack<CorsLayer, tower::layer::util::Identity>,
         >,
     >,
-> {
+>;
+
+pub fn rpc_api() -> RpcRouter {
     let repo = RemoteRepository {};
     let service = RepoServer::new(repo)
         .send_compressed(CompressionEncoding::Gzip)
