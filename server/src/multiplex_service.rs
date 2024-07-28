@@ -1,6 +1,6 @@
-use axum::{body::BoxBody, http::header::CONTENT_TYPE, response::IntoResponse};
+use axum::{body::Body, http::header::CONTENT_TYPE, response::IntoResponse};
 use futures::{future::BoxFuture, ready};
-use hyper::{Body, Request, Response};
+use hyper::{Request, Response};
 use std::{
     convert::Infallible,
     task::{Context, Poll},
@@ -45,7 +45,7 @@ where
     B::Response: IntoResponse,
     B::Future: Send + 'static,
 {
-    type Response = Response<BoxBody>;
+    type Response = Response<Body>;
     type Error = B::Error;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
