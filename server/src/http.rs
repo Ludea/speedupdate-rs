@@ -1,7 +1,7 @@
 use axum::{
     body::Bytes,
-    extract::{MatchedPath, Multipart},
-    http::{Request, StatusCode},
+    extract::{MatchedPath, Multipart, Request},
+    http::StatusCode,
     middleware::{self, Next},
     response::IntoResponse,
     routing::{get, post},
@@ -9,7 +9,7 @@ use axum::{
 };
 use futures::{Stream, TryStreamExt};
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use std::{fs, future::ready, io, net::SocketAddr, path::Path};
+use std::{fs, future::ready, io, path::Path};
 use tokio::{fs::File, io::BufWriter};
 use tokio_util::io::StreamReader;
 use tower_http::{
@@ -21,20 +21,6 @@ const UPLOADS_DIRECTORY: &str = "uploads";
 
 async fn health_check() -> &'static str {
     "OK"
-}
-
-fn metrics_app() -> Router {
-    let recorder_handle = setup_metrics_recorder();
-    Router::new().route("/metrics", get(move || ready(recorder_handle.render())))
-}
-
-async fn start_metrics_server() {
-    let app = metrics_app();
-
-    // NOTE: expose metrics enpoint on a different port
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3001));
-    tracing::info!("HTTP metric server listening on {}", addr);
-    axum::Server::bind(&addr).serve(app.into_make_service()).await.unwrap()
 }
 
 fn setup_metrics_recorder() -> PrometheusHandle {
@@ -53,6 +39,8 @@ fn setup_metrics_recorder() -> PrometheusHandle {
 
 pub async fn http_api() -> Router {
     let serve_dir = ServeDir::new("/opt/speedupdate");
+    let recorder_handle = setup_metrics_recorder();
+
     if let Err(err) = tokio::fs::create_dir_all(UPLOADS_DIRECTORY).await {
         tracing::error!("failed to create `uploads` directory: {}", err);
     }
@@ -61,11 +49,12 @@ pub async fn http_api() -> Router {
         .nest_service("/", serve_dir.clone())
         .route_layer(middleware::from_fn(track_metrics))
         .route("/health", get(health_check))
+        .route("/metrics", get(move || ready(recorder_handle.render())))
         .route("/file/:file_name", post(accept_form))
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
 }
 
-async fn track_metrics<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
+async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
     let path = if let Some(matched_path) = req.extensions().get::<MatchedPath>() {
         matched_path.as_str().to_owned()
     } else {
@@ -102,22 +91,28 @@ where
         if let Some(file_stem_os) = Path::new(&path).file_stem() {
             if let Some(file_stem_str) = file_stem_os.to_str() {
                 let path = std::path::Path::new(UPLOADS_DIRECTORY).join(file_stem_str).join(path);
-                fs::create_dir_all(UPLOADS_DIRECTORY.to_owned() + "/" + file_stem_str);
+                if let Err(err) =
+                    fs::create_dir_all(UPLOADS_DIRECTORY.to_owned() + "/" + file_stem_str)
+                {
+                    tracing::error!("Error when creating folder: {}", err);
+                }
                 let mut file = BufWriter::new(File::create(path).await.unwrap());
 
-                // Copy the body into the file.
-                tokio::io::copy(&mut body_reader, &mut file).await;
-                Ok::<_, io::Error>(());
+                if let Err(err) = tokio::io::copy(&mut body_reader, &mut file).await {
+                    tracing::error!("Error when trying to copy file: {}", err);
+                }
+                Ok(())
             } else {
-                println!("Le nom du fichier n'est pas valide.");
+                tracing::error!("File name is not valid");
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
             }
         } else {
-            println!("Le fichier n'a pas de nom valide.");
+            tracing::error!("File don't have valid name");
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
-    .await;
-    Ok(())
-    //    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
+    .await
+    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
 }
 
 fn path_is_valid(path: &str) -> bool {

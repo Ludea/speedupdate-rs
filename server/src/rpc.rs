@@ -6,34 +6,52 @@ use libspeedupdate::{
     Repository,
 };
 use notify::{Config, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
     BuildInput, BuildOutput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Package,
-    RepoStatus, RepositoryPath, Version,
+    RepoStatus, RepositoryPath, Version, Versions,
 };
 use std::{
     fs,
-    io::ErrorKind,
     path::{Path, PathBuf},
     pin::Pin,
+    task::{Context, Poll},
     time::Duration,
 };
 
+use base64::{engine::general_purpose, Engine as _};
+use http_body_util::BodyExt;
+use http_body_util::Full;
+use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use ring::{
+    rand,
+    signature::{EcdsaKeyPair, KeyPair},
+};
+use tokio::select;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+use tokio_util::sync::CancellationToken;
 use tonic::{
+    body::BoxBody,
     codec::CompressionEncoding,
-    metadata::MetadataValue,
-    service::interceptor::InterceptorLayer,
     transport::{server::Router, Server},
     Request, Response, Status,
 };
 use tonic_web::GrpcWebLayer;
-use tower::layer::util::Stack;
+use tower::{layer::util::Stack, timeout::TimeoutLayer, Layer, Service};
 use tower_http::cors::{Any, CorsLayer};
 
 pub mod speedupdaterpc {
     tonic::include_proto!("speedupdate");
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Claims {
+    sub: String,
+    email: String,
+    exp: u64,
+    scope: String,
 }
 
 type ResponseStream = Pin<Box<dyn Stream<Item = Result<RepoStatus, Status>> + Send>>;
@@ -44,18 +62,28 @@ pub struct RemoteRepository {}
 impl Repo for RemoteRepository {
     async fn init(&self, request: Request<RepositoryPath>) -> Result<Response<Empty>, Status> {
         let repository_path = request.into_inner().path;
-        let mut repo = Repository::new(PathBuf::from(repository_path));
+        let mut repo = Repository::new(PathBuf::from(repository_path.clone()));
         let reply = Empty {};
-
-        match repo.init() {
-            Ok(_) => Ok(Response::new(reply)),
-            Err(err) => Err(Status::internal(err.to_string())),
+        if let Err(err) = fs::create_dir_all(repository_path.clone()) {
+            tracing::error!("{}", err);
+            return Err(Status::internal(err.to_string()));
+        } else {
+            match repo.init() {
+                Ok(_) => {
+                    tracing::info!("Repository initialized at {}", repository_path);
+                    return Ok(Response::new(reply));
+                }
+                Err(err) => {
+                    tracing::error!("{}", err);
+                    return Err(Status::internal(err.to_string()));
+                }
+            }
         }
     }
 
     async fn is_init(&self, request: Request<RepositoryPath>) -> Result<Response<Empty>, Status> {
         let repository_path = request.into_inner().path;
-        let package_file = repository_path + "packages";
+        let package_file = repository_path + "/packages";
         let package_file_path = Path::new(&package_file);
         if package_file_path.exists() {
             let reply = Empty {};
@@ -72,48 +100,81 @@ impl Repo for RemoteRepository {
         request: Request<RepositoryPath>,
     ) -> Result<Response<Self::StatusStream>, Status> {
         let repository_path = request.into_inner().path;
-        let state = match repo_state(repository_path.clone()) {
-            Ok(local_state) => local_state,
-            Err(err) => return Err(Status::internal(err)),
+        let repo_request = repository_path.clone(); //Arc::clone(&repository_path);
+        let repo_watch = repository_path.clone();
+
+        let request_future = async move {
+            let state = match repo_state(repo_request.clone()) {
+                Ok(local_state) => local_state,
+                Err(err) => return Err(Status::internal(err)),
+            };
+
+            let (local_tx, mut local_rx) = mpsc::channel(1);
+            let (tx, rx) = mpsc::channel(128);
+
+            send_message(tx.clone(), state);
+
+            let config = Config::default().with_poll_interval(Duration::from_secs(1));
+            let mut watcher = notify::PollWatcher::new(
+                move |res| match res {
+                    Ok(_) => {
+                        if let Err(err) = local_tx.blocking_send(res) {
+                            tracing::error!("{:?}", err);
+                        }
+                    }
+                    Err(err) => tracing::error!("{}", err),
+                },
+                config,
+            )
+            .unwrap();
+            if Path::new(&(repo_request.clone() + "/current")).exists() {
+                watcher
+                    .watch(
+                        Path::new(&(repo_request.clone() + "/current")),
+                        RecursiveMode::NonRecursive,
+                    )
+                    .unwrap();
+            }
+            watcher
+                .watch(
+                    Path::new(&(repo_request.clone() + "/packages")),
+                    RecursiveMode::NonRecursive,
+                )
+                .unwrap();
+            watcher
+                .watch(
+                    Path::new(&(repo_request.clone() + "/versions")),
+                    RecursiveMode::NonRecursive,
+                )
+                .unwrap();
+            if Path::new(&(repo_request.clone() + "/.build")).exists() {
+                watcher
+                    .watch(Path::new(&(repo_request + "/.build")), RecursiveMode::NonRecursive)
+                    .unwrap();
+            }
+
+            tokio::task::spawn(async move {
+                let _watcher = watcher;
+                while let Some(Ok(_)) = local_rx.recv().await {
+                    match repo_state(repo_watch.clone()) {
+                        Ok(new_state) => {
+                            send_message(tx.clone(), new_state);
+                        }
+                        Err(err) => { Err(Status::internal(err)) }.unwrap(),
+                    };
+                }
+            });
+
+            let output_stream = ReceiverStream::new(rx);
+            Ok(Response::new(Box::pin(output_stream) as Self::StatusStream))
         };
 
-        let (local_tx, mut local_rx) = mpsc::channel(1);
-        let (tx, rx) = mpsc::channel(128);
+        let cancellation_future = async move {
+            tracing::info!("Stop streaming {} status", repository_path);
+            Err(Status::cancelled("Request cancelled by client"))
+        };
 
-        send_message(tx.clone(), state);
-
-        let config = Config::default().with_poll_interval(Duration::from_secs(1));
-        let mut watcher = notify::PollWatcher::new(
-            move |res| match res {
-                Ok(_) => {
-                    if let Err(err) = local_tx.blocking_send(res) {
-                        tracing::error!("{:?}", err);
-                    }
-                }
-                Err(err) => tracing::error!("{}", err),
-            },
-            config,
-        )
-        .unwrap();
-        watcher.watch(Path::new("./current"), RecursiveMode::NonRecursive).unwrap();
-        watcher.watch(Path::new("./packages"), RecursiveMode::NonRecursive).unwrap();
-        watcher.watch(Path::new("./versions"), RecursiveMode::NonRecursive).unwrap();
-        watcher.watch(Path::new("./.build"), RecursiveMode::NonRecursive).unwrap();
-
-        tokio::task::spawn(async move {
-            let _watcher = watcher;
-            while let Some(Ok(_)) = local_rx.recv().await {
-                match repo_state(repository_path.clone()) {
-                    Ok(new_state) => {
-                        send_message(tx.clone(), new_state);
-                    }
-                    Err(err) => { Err(Status::internal(err)) }.unwrap(),
-                };
-            }
-        });
-
-        let output_stream = ReceiverStream::new(rx);
-        Ok(Response::new(Box::pin(output_stream) as Self::StatusStream))
+        with_cancellation_handler(request_future, cancellation_future).await
     }
 
     async fn get_current_version(
@@ -154,31 +215,31 @@ impl Repo for RemoteRepository {
     async fn register_version(&self, request: Request<Version>) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
-        let repo = Repository::new(PathBuf::from(repository_path));
-        let version_string = CleanName::new(inner.version).unwrap();
 
-        let description: Option<String> = None; // = inner.description;
-        let description_file: Option<String> = None; // = inner.description_file
-        let description = match (description, description_file) {
-            (None, None) => String::new(),
-            (None, Some(descfile)) => String::new(), //{
-            /*      match descfile {
-                "-" => {
-                    let mut desc = String::new();
-                    std::io::stdin().read_to_string(&mut desc).map(|_| desc)
-                }
-                path => std::fs::read_to_string(path),
-            }}*/
-            (Some(desc), None) => desc,
-            (Some(_), Some(_)) => "foo".to_string(),
+        let repo = Repository::new(PathBuf::from(repository_path.clone()));
+        let version_string = match CleanName::new(inner.version) {
+            Ok(ver) => ver,
+            Err(err) => {
+                return Err(Status::internal(err.to_string()));
+            }
         };
-        let version = v1::Version { revision: version_string, description };
+
+        let description = inner.description;
+        let description = description.unwrap_or_default();
+        let version = v1::Version { revision: version_string.clone(), description };
         let reply = Empty {};
         match repo.register_version(&version) {
-            Ok(_) => Ok(Response::new(reply)),
-            Err(err) => Err(Status::internal(err.to_string())),
+            Ok(_) => {
+                tracing::info!("version {} registered for {}", version_string, repository_path);
+                return Ok(Response::new(reply));
+            }
+            Err(err) => {
+                tracing::error!("{}", err);
+                return Err(Status::internal(err.to_string()));
+            }
         }
     }
+
     async fn unregister_version(
         &self,
         request: Request<Version>,
@@ -379,42 +440,40 @@ impl Repo for RemoteRepository {
 
 fn repo_state(path: String) -> Result<RepoStatus, String> {
     let repo = Repository::new(PathBuf::from(path));
-
-    let mut list_versions: Vec<String> = Vec::new();
+    let mut list_versions: Vec<Versions> = Vec::new();
     match repo.versions() {
         Ok(value) => {
             for val in value.iter() {
-                list_versions.push(val.revision().to_string())
+                let new_version = Versions {
+                    revision: val.revision().to_string(),
+                    description: val.description().to_string(),
+                };
+                list_versions.push(new_version);
             }
         }
-        Err(error) => return Err(error.to_string()),
+        Err(error) => return Err("Versions : ".to_owned() + &error.to_string()),
     }
 
     let current_version = match repo.current_version() {
         Ok(value) => value.version().to_string(),
-        Err(error) => {
-            if error.kind() == ErrorKind::NotFound {
-                return Err(error.to_string());
-            }
-            "-".to_string()
-        }
+        Err(_) => "-".to_string(),
     };
 
     let mut list_packages = Vec::new();
-    let mut size = 0;
-    match repo.packages() {
+
+    let size = match repo.packages() {
         Ok(value) => {
             for val in value.iter() {
                 list_packages.push(val.package_data_name().to_string());
             }
-            size = value.iter().map(|p| p.size()).sum::<u64>();
+            value.iter().map(|p| p.size()).sum::<u64>()
         }
-        Err(error) => return Err(error.to_string()),
+        Err(error) => return Err("Packages : ".to_owned() + &error.to_string()),
     };
 
     let available_packages = match repo.available_packages(".build".to_string()) {
         Ok(pack) => pack,
-        Err(err) => return Err(err.to_string()),
+        Err(err) => return Err("Available packages : ".to_owned() + &err.to_string()),
     };
 
     let mut available_binaries = Vec::new();
@@ -430,7 +489,7 @@ fn repo_state(path: String) -> Result<RepoStatus, String> {
                 }
             }
         }
-        Err(err) => return Err(err.to_string()),
+        Err(err) => return Err("Available binaries".to_owned() + &err.to_string()),
     }
 
     let state = RepoStatus {
@@ -451,29 +510,142 @@ fn send_message(tx: tokio::sync::mpsc::Sender<Result<RepoStatus, Status>>, messa
     });
 }
 
-pub fn rpc_api() -> Router<Stack<GrpcWebLayer, Stack<CorsLayer, tower::layer::util::Identity>>> {
+async fn with_cancellation_handler<FRequest, FCancellation>(
+    request_future: FRequest,
+    cancellation_future: FCancellation,
+) -> Result<Response<ResponseStream>, Status>
+where
+    FRequest: Future<Output = Result<Response<ResponseStream>, Status>> + Send + 'static,
+    FCancellation: Future<Output = Result<Response<ResponseStream>, Status>> + Send + 'static,
+{
+    let token = CancellationToken::new();
+
+    let _drop_guard = token.clone().drop_guard();
+    let select_task = tokio::spawn(async move {
+        select! {
+            res = request_future => res,
+            _ = token.cancelled() => cancellation_future.await,
+        }
+    });
+
+    select_task.await.unwrap()
+}
+type RpcRouter = Router<
+    Stack<
+        GrpcWebLayer,
+        Stack<
+            Stack<AuthMiddlewareLayer, Stack<TimeoutLayer, tower::layer::util::Identity>>,
+            Stack<CorsLayer, tower::layer::util::Identity>,
+        >,
+    >,
+>;
+
+pub fn rpc_api() -> RpcRouter {
     let repo = RemoteRepository {};
-    let svc = RepoServer::with_interceptor(repo, check_auth);
-    //.send_compressed(CompressionEncoding::Gzip)
-    //.accept_compressed(CompressionEncoding::Gzip);
+    let service = RepoServer::new(repo)
+        .send_compressed(CompressionEncoding::Gzip)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     let cors_layer = CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any);
+
+    let layer = tower::ServiceBuilder::new()
+        .timeout(Duration::from_secs(30))
+        .layer(AuthMiddlewareLayer::default())
+        .into_inner();
 
     Server::builder()
         .accept_http1(true)
         .layer(cors_layer)
+        .layer(layer)
         .layer(GrpcWebLayer::new())
-        .add_service(svc)
+        .add_service(service)
 }
 
-fn check_auth(req: Request<()>) -> Result<Request<()>, Status> {
-    let token: MetadataValue<_> = "Bearer allo".parse().unwrap();
+#[derive(Debug, Clone, Default)]
+pub struct AuthMiddlewareLayer {}
 
-    match req.metadata().get("authorization") {
-        Some(t) => {
-            println!("{:?}", t.to_str().unwrap().replace("Bearer ", ""));
-            Ok(req)
-        }
-        _ => Err(Status::unauthenticated("No valid auth token")),
+impl<S> Layer<S> for AuthMiddlewareLayer {
+    type Service = AuthMiddleware<S>;
+
+    fn layer(&self, service: S) -> Self::Service {
+        AuthMiddleware { inner: service }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AuthMiddleware<S> {
+    inner: S,
+}
+
+type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
+
+impl<S> Service<hyper::Request<BoxBody>> for AuthMiddleware<S>
+where
+    S: Service<hyper::Request<BoxBody>, Response = hyper::Response<BoxBody>>
+        + Clone
+        + Send
+        + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: hyper::Request<BoxBody>) -> Self::Future {
+        let clone = self.inner.clone();
+        let mut inner = std::mem::replace(&mut self.inner, clone);
+
+        Box::pin(async move {
+            let (parts, body) = req.into_parts();
+            let encoded_pkcs8 = fs::read_to_string("pkey").unwrap();
+            let decoded_pkcs8 = general_purpose::STANDARD.decode(encoded_pkcs8).unwrap();
+            let rng = &rand::SystemRandom::new();
+            let pair = EcdsaKeyPair::from_pkcs8(
+                &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
+                &decoded_pkcs8,
+                rng,
+            )
+            .unwrap();
+            let decoding_key = &DecodingKey::from_ec_der(pair.public_key().as_ref());
+
+            let content = body.collect().await.unwrap().to_bytes().clone();
+            //	    let content_without_ascii = content.trim_ascii();
+            //            tracing::info!("body : {:?}", content_without_ascii);
+            /* match parts.headers.get("authorization") {
+                     Some(t) => {
+                         let validation = &mut Validation::new(Algorithm::ES256);
+                         validation.validate_exp = false;
+                         let t_string = t.to_str().unwrap().replace("Bearer ", "");
+                         match decode::<Claims>(&t_string, decoding_key, validation) {
+                             Ok(token_data) => {
+                 // Compare body with scope
+                                 if token_data.claims.scope == "" {
+                                    println!("12 : {:?}", token_data);
+            //                         let body = BoxBody::new(
+              //                           Full::new(content)
+                //                             .map_err(|err| Status::internal(err.to_string())),
+                  //                   );
+                    //                 let response =
+                      //                   inner.call(hyper::Request::from_parts(parts, body)).await?;
+                        //             return Ok(response);
+                                 } else {
+                                     return Err(Status::unauthenticated("Not allowed"));
+                                 }
+                             }
+                             Err(err) => return Err(Status::unauthenticated(err.to_string())),
+                         }
+                     }
+                     None => return Err(Status::unauthenticated("No token found")),
+                 }*/
+
+            let body =
+                BoxBody::new(Full::new(content).map_err(|err| Status::internal(err.to_string())));
+            let response = inner.call(hyper::Request::from_parts(parts, body)).await?;
+            Ok(response)
+        })
     }
 }

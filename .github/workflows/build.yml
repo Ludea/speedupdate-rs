@@ -29,10 +29,6 @@ jobs:
       - name: install deps
         if: matrix.platform == 'ubuntu-22.04' 
         run: sudo apt update && sudo apt install -y musl-dev musl-tools
-      - name: Install Protoc
-        uses: arduino/setup-protoc@master
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: 'Setup Rust on Windows and MacOS'
         if: matrix.platform != 'ubuntu-22.04' 
         uses: dtolnay/rust-toolchain@stable
@@ -44,8 +40,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 #      - name: Clippy
 #        run: cargo clippy --all-targets --all-features -- -D warnings
-#      - name: Fmt
-#        run: cargo fmt --all -- --check
+      - name: Fmt
+        run: cargo fmt --all -- --check
       - name: Build Linux binaries
         if: matrix.platform == 'ubuntu-22.04' 
         run: cargo build --release --verbose --target x86_64-unknown-linux-musl
@@ -86,10 +82,6 @@ jobs:
     - run: git config --global --add safe.directory /__w/speedupdate-rs/speedupdate-rs 
     - name: Set outputs
       run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
-    - name: Install Protoc
-      uses: arduino/setup-protoc@master
-      with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
 #      - name: Clippy
 #        run: cargo clippy --all-targets --all-features -- -D warnings
 #      - name: Fmt

@@ -42,7 +42,7 @@ jobs:
         run: ct install --chart-dirs chart/ --charts chart/ 
 
       - name: Get version
-        uses: mikefarah/yq@v4.44.1
+        uses: mikefarah/yq@v4.44.2
         with:
           cmd: echo "VERSION=$(yq .version chart/Chart.yaml)" >> $GITHUB_ENV
         
@@ -50,7 +50,7 @@ jobs:
         run: helm package chart/
 
       - name: Push
-        uses: cloudsmith-io/action@v0.6.7
+        uses: cloudsmith-io/action@v0.6.13
         with:
           api-key: ${{ secrets.CLOUDSMITH_API_KEY }}
           command: "push"

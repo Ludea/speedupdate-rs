@@ -13,7 +13,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install deps
-      run: sudo apt update && sudo apt install -y protobuf-compiler musl-tools musl-dev 
+      run: sudo apt update && sudo apt install -y musl-tools musl-dev 
     - name: Setup rust
       uses: dtolnay/rust-toolchain@stable
       with:
@@ -108,7 +108,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install deps
-      run: sudo apt update && sudo apt install -y protobuf-compiler zstd
+      run: sudo apt update && sudo apt install -y zstd
     - name: Install cargo deb
       run: cargo install cargo-deb
     - name: Build binary
@@ -145,11 +145,11 @@ jobs:
       uses: docker/setup-qemu-action@v3
     - name: Get version
       id: version
-      uses: mikefarah/yq@v4.44.1
+      uses: mikefarah/yq@v4.44.2
       with:
         cmd: yq '.package.version' server/Cargo.toml
     - name: Build container 
-      uses: docker/build-push-action@v5
+      uses: docker/build-push-action@v6
       with:
         push: true
         tags: |
@@ -162,8 +162,6 @@ jobs:
     runs-on: windows-2022
     steps:
     - uses: actions/checkout@v4
-    - name: install deps
-      run: choco install protoc -y 
     - name: Build Binaries
       run: |
         cargo build --verbose --release
@@ -181,8 +179,6 @@ jobs:
     runs-on: macos-12
     steps:
     - uses: actions/checkout@v4
-    - name: install deps
-      run: brew install protobuf
     - name: Build Binaries
       run: |
         cargo build --verbose --release

@@ -10,21 +10,21 @@ Speedupdate api
 
 [dependencies]
 anyhow = "1.0.66"
-axum = { version = "0.6.20", features = ["multipart"] }
+axum = { version = "0.7", features = ["multipart"] }
 futures = { version = "0.3", default-features = false }
-instant-acme = "0.4.0"
-libunftp = { git = "https://github.com/bolcom/libunftp" }
+#instant-acme = "0.7.1"
+libunftp = "0.20"
 unftp-sbe-fs = "0.2"
 pretty_env_logger = "0.5"
-metrics = "0.22"
-metrics-exporter-prometheus = "0.14"
-prost = "0.12"
+metrics = "0.23"
+metrics-exporter-prometheus = "0.15"
+prost = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 libspeedupdate = { path = "../lib" }
-tonic = {version = "0.10", features = ["tls", "gzip"] }
-tonic-web = "0.10"
-tower-http = { version = "0.4", features = ["fs", "trace", "cors"] }
+tonic = { version = "0.12", features = ["gzip"] }
+tonic-web = "0.12"
+tower-http = { version = "0.5", features = ["fs", "trace", "cors"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 tokio-util = { version = "0.7", features = ["io"] }
@@ -34,13 +34,15 @@ hyper = "0.14"
 http = "1.1.0"
 tower = { version = "0.4", features = ["full"] }
 notify = { version = "6", default-features = false, features = ["macos_fsevent"] }
-console-subscriber = "0.2.0"
 jsonwebtoken = "9.3.0"
+base64 = "0.22.1"
+ring = "0.17.8"
+http-body-util = "0.1.2"
 
 [build-dependencies]
-tonic-build = { version = "0.11.0", features = ["prost"] }
-prost-build = "0.12"
-protox = "0.6"
+tonic-build = { version = "0.12.1", features = ["prost"] }
+prost-build = "0.13"
+protox = "0.7"
 
 [package.metadata.generate-rpm]
 assets = [

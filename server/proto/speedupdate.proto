@@ -27,9 +27,14 @@ message FileToDelete {
   string file = 1;
 }
 
+message Versions {
+  string revision = 1;
+  string description = 2;
+}
+
 message RepoStatus {
   string current_version = 1;
-  repeated string versions = 2;
+  repeated Versions versions = 2;
   repeated string packages = 3;
   repeated string available_packages = 4;
   repeated string available_binaries = 5;
@@ -39,6 +44,7 @@ message RepoStatus {
 message Version {
   string path = 1;
   string version = 2;
+  optional string description = 3;
 }
 
 message CurrentVersion {
