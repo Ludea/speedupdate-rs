@@ -33,13 +33,10 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
 use tonic::{
-    body::BoxBody,
-    codec::CompressionEncoding,
-    transport::{server::Router, Server},
-    Request, Response, Status,
+    body::BoxBody, codec::CompressionEncoding, transport::Server, Request, Response, Status,
 };
 use tonic_web::GrpcWebLayer;
-use tower::{layer::util::Stack, timeout::TimeoutLayer, Layer, Service};
+use tower::{Layer, Service};
 use tower_http::cors::{Any, CorsLayer};
 
 pub mod speedupdaterpc {
@@ -530,17 +527,10 @@ where
 
     select_task.await.unwrap()
 }
-type RpcRouter = Router<
-    Stack<
-        GrpcWebLayer,
-        Stack<
-            Stack<AuthMiddlewareLayer, Stack<TimeoutLayer, tower::layer::util::Identity>>,
-            Stack<CorsLayer, tower::layer::util::Identity>,
-        >,
-    >,
->;
 
-pub fn rpc_api() -> RpcRouter {
+pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
+    let addr = "0.0.0.0:3000".parse().unwrap();
+
     let repo = RemoteRepository {};
     let service = RepoServer::new(repo)
         .send_compressed(CompressionEncoding::Gzip)
@@ -553,12 +543,18 @@ pub fn rpc_api() -> RpcRouter {
         .layer(AuthMiddlewareLayer::default())
         .into_inner();
 
+    tracing::info!("Speedupdate gRPC server listening on {addr}");
+
     Server::builder()
         .accept_http1(true)
         .layer(cors_layer)
         .layer(layer)
         .layer(GrpcWebLayer::new())
         .add_service(service)
+        .serve(addr)
+        .await?;
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, Default)]
