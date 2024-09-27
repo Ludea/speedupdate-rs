@@ -233,7 +233,7 @@ impl CoderOptions {
 
     /// Maximum size to not reach to keep this coder
     pub fn max_size(&self) -> io::Result<u64> {
-        self.get_size(&["maxsize"], u64::max_value())
+        self.get_size(&["maxsize"], u64::MAX)
     }
 
     pub fn from_static_str(s: &str) -> io::Result<Self> {

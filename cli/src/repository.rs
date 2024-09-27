@@ -312,59 +312,59 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
         None => unreachable!(),
     };
 
-    let state = state.borrow();
-    let res = if matches.get_flag("no_progress") {
-        build_stream.try_for_each(|_state| future::ready(Ok(()))).await
-    } else {
-        let draw_target = ProgressDrawTarget::term(Term::buffered_stdout(), 8);
-        let m = MultiProgress::with_draw_target(draw_target);
-        let sty = ProgressStyle::default_bar().progress_chars("##-");
-        const TPL: &str =
-        "[{elapsed_precise}] {wide_bar:40.cyan/blue} {bytes:>8}/{total_bytes:8} ({bytes_per_sec:>10}, {eta:4}) {msg:32}";
+    //let res = if matches.get_flag("no_progress") {
+    // build_stream.try_for_each(|_state| future::ready(Ok(()))).await
+    //} else {
+    let draw_target = ProgressDrawTarget::term(Term::buffered_stdout(), 8);
+    let m = MultiProgress::with_draw_target(draw_target);
+    let sty = ProgressStyle::default_bar().progress_chars("##-");
+    const TPL: &str =
+        "[{wide_bar:0.cyan/blue}] {bytes:>8}/{total_bytes:8} ({bytes_per_sec:>10}, {eta:4}) {msg:32}";
 
-        let mut bars = state
-            .workers
-            .iter()
-            .enumerate()
-            .map(|(idx, worker)| {
-                let pb = m.add(ProgressBar::new(worker.process_bytes));
-                pb.set_style(sty.clone().template(&format!("{}{}", idx, TPL)).unwrap());
-                pb.set_position(worker.processed_bytes);
-                pb.reset_eta();
-                pb
-            })
-            .collect::<Vec<_>>();
+    let mut bars = state
+        .borrow()
+        .workers
+        .iter()
+        .enumerate()
+        .map(|(idx, worker)| {
+            let pb = m.add(ProgressBar::new(worker.process_bytes));
+            pb.set_style(sty.clone().template(&format!("{}{}", idx, TPL)).unwrap());
+            pb.set_position(worker.processed_bytes);
+            pb.reset_eta();
+            pb
+        })
+        .collect::<Vec<_>>();
 
-        LOGGER.set_progress_bar(bars.get(0).map(|b| b.downgrade()));
+    LOGGER.set_progress_bar(bars.first().map(|b| b.downgrade()));
 
-        drop(state); // drop the Ref<_>
+    drop(state); // drop the Ref<_>
 
-        let res = build_stream
-            .try_for_each(|state| {
-                let state = state.borrow();
-                for (worker, bar) in state.workers.iter().zip(bars.iter_mut()) {
-                    bar.set_position(worker.processed_bytes);
-                    bar.set_length(worker.process_bytes);
-                    bar.set_message(worker.task_name.to_string());
-                }
+    let res = build_stream
+        .try_for_each(|state| {
+            let state = state.borrow();
+            for (worker, bar) in state.workers.iter().zip(bars.iter_mut()) {
+                bar.set_position(worker.processed_bytes);
+                bar.set_length(worker.process_bytes);
+                bar.set_message(worker.task_name.to_string());
+            }
 
-                future::ready(Ok(()))
-            })
-            .await;
+            future::ready(Ok(()))
+        })
+        .await;
 
-        for bar in bars {
-            bar.finish();
-        }
+    for bar in bars {
+        bar.finish();
+    }
 
-        res
-    };
+    //  res
+    //};
 
     if let Err(err) = res {
         error!("build failed: {}", err);
         std::process::exit(1)
     }
 
-    info!("package `{}` built", builder.package_metadata_name());
+    info!("Package `{}` built", builder.package_metadata_name());
 
     if matches.get_flag("register") {
         try_(builder.add_to_repository(repository), "register package");

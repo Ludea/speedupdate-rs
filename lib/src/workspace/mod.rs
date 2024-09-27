@@ -203,7 +203,7 @@ impl Workspace {
             .boxed_local()
     }
 
-    pub fn check<'a>(&'a mut self) -> GlobalCheckStream<'_> {
+    pub fn check(&mut self) -> GlobalCheckStream<'_> {
         self::check::check(self).try_flatten_stream().boxed_local()
     }
 }

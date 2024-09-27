@@ -16,7 +16,7 @@ service Repo {
   rpc Packages (RepositoryPath) returns (ListPackVerBin);
   rpc Available_packages (RepositoryPath) returns (ListPackVerBin);
   rpc Delete_file (FileToDelete) returns (Empty);
-  rpc Build_package (BuildInput) returns (BuildOutput);
+  rpc Build_package (BuildInput) returns (Empty);
 }
 
 message RepositoryPath {
@@ -69,10 +69,6 @@ message BuildInput {
   repeated string compressors = 7;
   repeated string patcher = 8;
   optional string from = 9;
-}
-
-message BuildOutput {
-  string error = 1;
 }
 
 message Empty {}

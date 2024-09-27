@@ -4,7 +4,6 @@
 
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-use std::usize;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 struct State {
@@ -48,10 +47,10 @@ struct Track {
 /// to each node. This implementation isn't memory-efficient as it may leave duplicate
 /// nodes in the queue. It also uses `usize::MAX` as a sentinel value,
 /// for a simpler implementation.
-pub fn shortest_path(adj_list: &Vec<Vec<Edge>>, start: usize, goal: usize) -> Option<Vec<usize>> {
+pub fn shortest_path(adj_list: &[Vec<Edge>], start: usize, goal: usize) -> Option<Vec<usize>> {
     // dist[node] = current shortest distance from `start` to `node`
     let mut track: Vec<Track> =
-        (0..adj_list.len()).map(|_| Track { dist: u64::max_value(), prev: None }).collect();
+        (0..adj_list.len()).map(|_| Track { dist: u64::MAX, prev: None }).collect();
 
     let mut heap = BinaryHeap::new();
 

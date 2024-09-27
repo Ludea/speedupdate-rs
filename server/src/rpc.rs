@@ -9,8 +9,8 @@ use notify::{Config, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
-    BuildInput, BuildOutput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Package,
-    RepoStatus, RepositoryPath, Version, Versions,
+    BuildInput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Package, RepoStatus,
+    RepositoryPath, Version, Versions,
 };
 use std::{
     fs,
@@ -335,23 +335,21 @@ impl Repo for RemoteRepository {
         }
     }
 
-    async fn build_package(
-        &self,
-        request: Request<BuildInput>,
-    ) -> Result<Response<BuildOutput>, Status> {
+    async fn build_package(&self, request: Request<BuildInput>) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
         let repository = Repository::new(PathBuf::from(repository_path));
-        let mut reply = BuildOutput { error: "".to_string() };
-        let mut source_version = None;
-        match CleanName::new(inner.version) {
-            Ok(value) => source_version = Some(value),
-            Err(err) => reply = BuildOutput { error: err },
-        }
+        let reply = Empty {};
+
+        let source_version = match CleanName::new(inner.version) {
+            Ok(ver) => ver,
+            Err(err) => {
+                return Err(Status::internal(err.to_string()));
+            }
+        };
         let source_directory = PathBuf::from(inner.source_directory);
         let build_directory = PathBuf::from(inner.build_directory.unwrap_or(".build".to_string()));
-        let mut builder =
-            PackageBuilder::new(build_directory, source_version.unwrap(), source_directory);
+        let mut builder = PackageBuilder::new(build_directory, source_version, source_directory);
         if let Some(num_threads) = inner.num_threads {
             builder.set_num_threads(num_threads.try_into().unwrap());
         }
@@ -366,59 +364,63 @@ impl Repo for RemoteRepository {
             options.patchers =
                 patchers.iter().map(|s| CoderOptions::from_static_str(s).unwrap()).collect();
         }
-        if let Some(from) = Some(inner.from) {
-            let mut prev_version = CleanName::new("".to_string()).unwrap();
-            let prev_directory = builder.build_directory.join(".from");
-            match fs::create_dir_all(&prev_directory) {
-                Ok(_) => match CleanName::new(from.unwrap()) {
-                    Ok(value) => prev_version = value,
-                    Err(err) => reply = BuildOutput { error: err },
-                },
-                Err(err) => reply = BuildOutput { error: err.to_string() },
-            };
-            let link = repository.link();
-            let mut workspace = Workspace::open(&prev_directory).unwrap();
-            let goal_version = Some(prev_version.clone());
-            let mut update_stream = workspace.update(&link, goal_version, UpdateOptions::default());
-            /*            let state = match update_stream.next().await {
-                Some(Ok(state)) => {
-                    reply = BuildOutput { error: "foo".to_string() };
-                    state
-                }
-                Some(Err(err)) => {
-                    reply = BuildOutput { error: "Update failed: ".to_string() + &err.to_string() };
-                    std::process::exit(1)
-                }
-                None => unreachable!(),
-            };
-            let state = state.lock();
-            let progress = state.histogram.progress();
-            let res = update_stream.try_for_each(|_state| future::ready(Ok(()))).await;
-            if let Err(err) = res {
-                reply = BuildOutput { error: err.to_string() }
-            }
-            match workspace.remove_metadata() {
-                Ok(_) => (),
-                Err(error) => reply = BuildOutput { error: error.to_string() },
-            }
-            builder.set_previous(prev_version, prev_directory); */
-        }
+        /*        if let Some(from) = Some(inner.from) {
+                    let mut prev_version = CleanName::new("".to_string()).unwrap();
+                    let prev_directory = builder.build_directory.join(".from");
+                    match fs::create_dir_all(&prev_directory) {
+                        Ok(_) => {
+                            prev_version = match CleanName::new(from.unwrap()) {
+                                Ok(ver) => ver,
+                                Err(err) => {
+                                    return Err(Status::internal(err.to_string()));
+                                }
+                            };
+                        }
+                        Err(err) => {
+                            return Err(Status::internal(err.to_string()));
+                        }
+                    };
+                    let link = repository.link();
+                    let mut workspace = Workspace::open(&prev_directory).unwrap();
+                    let goal_version = Some(prev_version.clone());
+                    let mut update_stream = workspace.update(&link, goal_version, UpdateOptions::default());
 
-        /*let mut build_stream = builder.build();
-        let mut build_state;
-        let state = match build_stream.next().await {
+                    let state = match update_stream.next().await {
+                        Some(Ok(state)) => state,
+                        Some(Err(err)) => {
+                            return Err(Status::internal(err.to_string()));
+                        }
+                        None => unreachable!(),
+                    };
+                    let state = state.borrow();
+
+                    let progress = state.histogram.progress();
+                    let res = update_stream.try_for_each(|_state| future::ready(Ok(()))).await;
+                    if let Err(err) = res {
+                        return Err(Status::internal(err.to_string()));
+                    }
+                    match workspace.remove_metadata() {
+                        Ok(_) => (),
+                        Err(err) => {
+                            return Err(Status::internal(err.to_string()));
+                        }
+                    }
+                    builder.set_previous(prev_version, prev_directory);
+                }
+        */
+        /*        let mut build_stream = builder.build();
+        match build_stream.next().await {
             Some(Ok(state)) => state,
             Some(Err(err)) => {
-                reply = BuildOutput { error: "build failed".to_string() + &err.to_string() };
-                std::process::exit(1)
+                return Err(Status::internal(err.to_string()));
             }
             None => unreachable!(),
         };
-        let state = state.borrow();
+
         let res = build_stream.try_for_each(|_state| future::ready(Ok(()))).await;
         if let Err(err) = res {
-            reply = BuildOutput { error: err.to_string() }
-        }*/
+            return Err(Status::internal(err.to_string()));
+        } */
         Ok(Response::new(reply))
     }
 
