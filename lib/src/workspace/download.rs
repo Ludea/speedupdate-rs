@@ -80,7 +80,8 @@ where
             let data_file_path =
                 file_manager.download_operation_path(&package_name_o, operation_idx);
             info!("downl data_file_path {:?} for {}", data_file_path, &o.path());
-            let file = OpenOptions::new().write(true).create(true).open(data_file_path);
+            let file =
+                OpenOptions::new().write(true).create(true).truncate(true).open(data_file_path);
             Some((operation_idx, range, file, o))
         } else {
             None
