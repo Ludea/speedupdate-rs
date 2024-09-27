@@ -356,9 +356,7 @@ where
         let lgwin = encoder_options.get_u32_range(&["lgwin", "lg_window_size"], 20, 10..=30)?;
         params.quality = quality as i32;
         params.lgwin = lgwin as i32;
-        return Ok(BoxCoderDirect::boxed(::brotli::enc::writer::CompressorWriter::with_params(
-            output, 4096, &params,
-        )));
+        return Ok(BoxCoderDirect::boxed(brotli::CompressorWriter::new(output, 4096, 5, 22)));
     }
 
     #[cfg(feature = "lzma")]

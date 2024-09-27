@@ -9,7 +9,6 @@ use libspeedupdate::workspace::Workspace;
 use libspeedupdate::Repository;
 use log::{error, warn};
 use parking_lot::RwLock;
-//use env_filter::Filter;
 
 mod repository;
 mod workspace;
@@ -113,7 +112,7 @@ async fn main() {
                 .about("Manage repository")
                 .arg_required_else_help(true)
                 .arg(
-                    Arg::new("repository")
+                    Arg::new("local_repository")
                         .short('p')
                         .long("path")
                         .num_args(1)
@@ -291,7 +290,7 @@ async fn main() {
 
     match matches.subcommand() {
         Some(("repository", sub_matches)) => {
-            let repository_path = match sub_matches.get_one::<String>("repository") {
+            let repository_path = match sub_matches.get_one::<String>("local_repository") {
                 Some(path) => path.to_string(),
                 None => std::env::current_dir().unwrap().display().to_string(),
             };

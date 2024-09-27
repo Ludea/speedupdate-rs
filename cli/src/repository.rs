@@ -191,7 +191,7 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
     let mut builder = PackageBuilder::new(build_directory, source_version, source_directory);
     if let Some(num_threads) = matches.get_one::<String>("num_threads") {
         let num_threads =
-            try_(usize::from_str_radix(num_threads, 10), "convert --num-threads to integer");
+            try_(usize::from_str_radix(num_threads, 1), "convert --num-threads to integer");
         builder.set_num_threads(num_threads);
     }
     let mut options = BuildOptions::default();
@@ -312,7 +312,7 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
         None => unreachable!(),
     };
 
-    /*let state = state.borrow();
+    let state = state.borrow();
     let res = if matches.get_flag("no_progress") {
         build_stream.try_for_each(|_state| future::ready(Ok(()))).await
     } else {
@@ -362,7 +362,7 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
     if let Err(err) = res {
         error!("build failed: {}", err);
         std::process::exit(1)
-    }*/
+    }
 
     info!("package `{}` built", builder.package_metadata_name());
 
