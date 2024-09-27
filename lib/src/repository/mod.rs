@@ -131,13 +131,11 @@ impl Repository {
         let mut local_files = Vec::new();
         let mut registered_packages = Vec::new();
         if let Ok(entries) = fs::read_dir(self.dir.join(build_dir)) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    let extension = path.extension().and_then(std::ffi::OsStr::to_str);
-                    if extension == Some("0") {
-                        local_files.push(entry.file_name().into_string().unwrap());
-                    }
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let extension = path.extension().and_then(std::ffi::OsStr::to_str);
+                if extension == Some("0") {
+                    local_files.push(entry.file_name().into_string().unwrap());
                 }
             }
         }
