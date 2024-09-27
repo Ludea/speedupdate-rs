@@ -13,6 +13,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .skip_protoc_run()
         .file_descriptor_set_path(&file_descriptor_path)
-        .compile_with_config(config, &["proto/speedupdate.proto"], &["proto"])?;
+        .compile_protos_with_config(config, &["proto/speedupdate.proto"], &["proto"])?;
     Ok(())
 }
