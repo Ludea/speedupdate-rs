@@ -24,11 +24,7 @@ impl Logger {
     }
 
     fn init(&self) {
-        let mut builder = env_filter::Builder::new(); //from_env("RUST_LOG").build();
-        if let Ok(rust_log) = env::var("RUST_LOG") {
-            builder.parse(&rust_log);
-        }
-        let filter = builder.build();
+        let filter = env_filter::Builder::from_env("RUST_LOG").build();
         log::set_max_level(filter.filter());
         *self.filter.write() = Some(filter);
     }
@@ -230,7 +226,7 @@ async fn main() {
                             Arg::new("no_progress")
                                 .long("no-progress")
                                 .required(false)
-                                .action(ArgAction::SetFalse)
+                                .action(ArgAction::SetTrue)
                                 .help("Disable progress bars"),
                         ),
                 ),

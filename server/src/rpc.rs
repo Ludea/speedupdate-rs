@@ -2,7 +2,7 @@ use futures::prelude::*;
 use libspeedupdate::{
     metadata::{v1, CleanName},
     repository::{BuildOptions, CoderOptions, PackageBuilder},
-    workspace::{UpdateOptions, Workspace},
+    //    workspace::{UpdateOptions, Workspace},
     Repository,
 };
 use notify::{Config, RecursiveMode, Watcher};
@@ -337,8 +337,8 @@ impl Repo for RemoteRepository {
 
     async fn build_package(&self, request: Request<BuildInput>) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
-        let repository_path = inner.path;
-        let repository = Repository::new(PathBuf::from(repository_path));
+        //        let repository_path = inner.path;
+        //        let repository = Repository::new(PathBuf::from(repository_path));
         let reply = Empty {};
 
         let source_version = match CleanName::new(inner.version) {
@@ -360,11 +360,11 @@ impl Repo for RemoteRepository {
                 .map(|compressor| CoderOptions::from_static_str(compressor).unwrap())
                 .collect();
         }
-        if let Some(patchers) = Some(inner.patcher) {
+        /* if let Some(patchers) = Some(inner.patcher) {
             options.patchers =
                 patchers.iter().map(|s| CoderOptions::from_static_str(s).unwrap()).collect();
         }
-        /*        if let Some(from) = Some(inner.from) {
+                if let Some(from) = Some(inner.from) {
                     let mut prev_version = CleanName::new("".to_string()).unwrap();
                     let prev_directory = builder.build_directory.join(".from");
                     match fs::create_dir_all(&prev_directory) {
@@ -407,8 +407,8 @@ impl Repo for RemoteRepository {
                     }
                     builder.set_previous(prev_version, prev_directory);
                 }
-        */
-        /*        let mut build_stream = builder.build();
+
+                let mut build_stream = builder.build();
         match build_stream.next().await {
             Some(Ok(state)) => state,
             Some(Err(err)) => {
@@ -421,6 +421,7 @@ impl Repo for RemoteRepository {
         if let Err(err) = res {
             return Err(Status::internal(err.to_string()));
         } */
+
         Ok(Response::new(reply))
     }
 
