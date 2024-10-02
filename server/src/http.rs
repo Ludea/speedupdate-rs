@@ -9,12 +9,13 @@ use axum::{
 };
 use futures::{Stream, TryStreamExt};
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use std::{fs, future::ready, io, path::Path};
+use std::{fs, future::ready, io, net::SocketAddr, path::Path};
 use tokio::{fs::File, io::BufWriter};
 use tokio_util::io::StreamReader;
 use tower_http::{
     cors::{Any, CorsLayer},
     services::ServeDir,
+    trace::TraceLayer,
 };
 
 const UPLOADS_DIRECTORY: &str = "uploads";
@@ -37,21 +38,29 @@ fn setup_metrics_recorder() -> PrometheusHandle {
         .unwrap()
 }
 
-pub async fn http_api() -> Router {
-    let serve_dir = ServeDir::new("/opt/speedupdate");
+pub async fn http_api() {
+    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let local_addr = listener.local_addr().unwrap();
+    tracing::info!("HTTP listening on {local_addr}");
+
+    let serve_dir = ServeDir::new("/home/ludea/allo");
     let recorder_handle = setup_metrics_recorder();
 
     if let Err(err) = tokio::fs::create_dir_all(UPLOADS_DIRECTORY).await {
         tracing::error!("failed to create `uploads` directory: {}", err);
     }
 
-    Router::new()
+    let app = Router::new()
         .nest_service("/", serve_dir.clone())
         .route_layer(middleware::from_fn(track_metrics))
         .route("/health", get(health_check))
         .route("/metrics", get(move || ready(recorder_handle.render())))
         .route("/file/:file_name", post(accept_form))
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
+        .layer(TraceLayer::new_for_http());
+
+    axum::serve(listener, app).await.unwrap();
 }
 
 async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
