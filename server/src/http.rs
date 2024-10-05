@@ -8,8 +8,8 @@ use axum::{
     BoxError, Router,
 };
 use futures::{Stream, TryStreamExt};
-use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use std::{fs, future::ready, io, net::SocketAddr, path::Path};
+//use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
+use std::{fs, future::ready, io, path::Path};
 use tokio::{fs::File, io::BufWriter};
 use tokio_util::io::StreamReader;
 use tower_http::{
@@ -24,7 +24,7 @@ async fn health_check() -> &'static str {
     "OK"
 }
 
-fn setup_metrics_recorder() -> PrometheusHandle {
+/* fn setup_metrics_recorder() -> PrometheusHandle {
     const EXPONENTIAL_SECONDS: &[f64] =
         &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
 
@@ -36,8 +36,9 @@ fn setup_metrics_recorder() -> PrometheusHandle {
         .unwrap()
         .install_recorder()
         .unwrap()
-}
+}*/
 
+<<<<<<< HEAD
 pub async fn http_api() {
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -55,7 +56,7 @@ pub async fn http_api() {
         .nest_service("/", serve_dir.clone())
         .route_layer(middleware::from_fn(track_metrics))
         .route("/health", get(health_check))
-        .route("/metrics", get(move || ready(recorder_handle.render())))
+        //  .route("/metrics", get(move || ready(recorder_handle.render())))
         .route("/file/:file_name", post(accept_form))
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
         .layer(TraceLayer::new_for_http());

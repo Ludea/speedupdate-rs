@@ -9,8 +9,8 @@ use notify::{Config, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
-    BuildInput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Package, RepoStatus,
-    RepositoryPath, Version, Versions,
+    BuildInput, BuildOutput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Package,
+    RepoStatus, RepositoryPath, Version, Versions,
 };
 use std::{
     fs,
@@ -51,7 +51,8 @@ struct Claims {
     scope: String,
 }
 
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<RepoStatus, Status>> + Send>>;
+type ResponseStatusStream = Pin<Box<dyn Stream<Item = Result<RepoStatus, Status>> + Send>>;
+type ResponseBuildStream = Pin<Box<dyn Stream<Item = Result<BuildOutput, Status>> + Send>>;
 
 pub struct RemoteRepository {}
 
@@ -90,7 +91,7 @@ impl Repo for RemoteRepository {
         }
     }
 
-    type StatusStream = ResponseStream;
+    type StatusStream = ResponseStatusStream;
 
     async fn status(
         &self,
@@ -335,11 +336,15 @@ impl Repo for RemoteRepository {
         }
     }
 
-    async fn build_package(&self, request: Request<BuildInput>) -> Result<Response<Empty>, Status> {
+    type BuildStream = ResponseBuildStream;
+
+    async fn build(
+        &self,
+        request: Request<BuildInput>,
+    ) -> Result<Response<Self::BuildStream>, Status> {
         let inner = request.into_inner();
         //        let repository_path = inner.path;
         //        let repository = Repository::new(PathBuf::from(repository_path));
-        let reply = Empty {};
 
         let source_version = match CleanName::new(inner.version) {
             Ok(ver) => ver,
@@ -360,6 +365,8 @@ impl Repo for RemoteRepository {
                 .map(|compressor| CoderOptions::from_static_str(compressor).unwrap())
                 .collect();
         }
+        let (tx, rx) = mpsc::channel(128);
+
         /* if let Some(patchers) = Some(inner.patcher) {
             options.patchers =
                 patchers.iter().map(|s| CoderOptions::from_static_str(s).unwrap()).collect();
@@ -422,7 +429,17 @@ impl Repo for RemoteRepository {
             return Err(Status::internal(err.to_string()));
         } */
 
-        Ok(Response::new(reply))
+        let reply = BuildOutput { downloaded_bytes_start: 0, downloaded_bytes_end: 0 };
+        tokio::spawn(async move {
+            if let Err(err) = tx.send(Result::<_, Status>::Ok(reply)).await {
+                Err(Status::internal(err.to_string()))
+            } else {
+                Ok(())
+            }
+        });
+
+        let output_stream = ReceiverStream::new(rx);
+        Ok(Response::new(Box::pin(output_stream) as Self::BuildStream))
     }
 
     async fn delete_file(&self, request: Request<FileToDelete>) -> Result<Response<Empty>, Status> {
@@ -513,10 +530,10 @@ fn send_message(tx: tokio::sync::mpsc::Sender<Result<RepoStatus, Status>>, messa
 async fn with_cancellation_handler<FRequest, FCancellation>(
     request_future: FRequest,
     cancellation_future: FCancellation,
-) -> Result<Response<ResponseStream>, Status>
+) -> Result<Response<ResponseStatusStream>, Status>
 where
-    FRequest: Future<Output = Result<Response<ResponseStream>, Status>> + Send + 'static,
-    FCancellation: Future<Output = Result<Response<ResponseStream>, Status>> + Send + 'static,
+    FRequest: Future<Output = Result<Response<ResponseStatusStream>, Status>> + Send + 'static,
+    FCancellation: Future<Output = Result<Response<ResponseStatusStream>, Status>> + Send + 'static,
 {
     let token = CancellationToken::new();
 
