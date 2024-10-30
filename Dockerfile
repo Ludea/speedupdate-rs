@@ -10,4 +10,5 @@ EXPOSE 3000
 EXPOSE 3001
 EXPOSE 50051
 EXPOSE 2121
+
 CMD ["./speedupdateserver"] 
