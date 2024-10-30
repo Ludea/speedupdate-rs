@@ -1,0 +1,86 @@
+name: Build container
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs: 
+  build_aarch64:
+    runs-on: ubuntu-latest
+    container: messense/rust-musl-cross:aarch64-musl
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --release
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: speedupdate-arm64
+          if-no-files-found: error
+          path: |
+            target/aarch64-unknown-linux-musl/release/speedupdateserver
+            target/aarch64-unknown-linux-musl/release/speedupdate
+
+  build_x86_64:
+    runs-on: ubuntu-latest
+    container: messense/rust-musl-cross:aarch64-musl
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --release
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: speedupdate-amd64
+          if-no-files-found: error
+          path: |
+            target/x86_64-unknown-linux-musl/release/speedupdateserver
+            target/x86_64-unknown-linux-musl/release/speedupdate
+      
+  build-container:
+    runs-on: ubuntu-22.04
+    needs: [build_aarch64, build_x86_64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: speedupdate-*
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Build container
+        uses: docker/build-push-action@v6
+        with:
+          file: Dockerfile
+          context: .
+          push: true
+          tags: ludea/speedupdate:latest
+          platforms: linux/amd64, linux/arm64
+          target: alpine 
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.10.0
+      - id: "configure-git"
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.6.1
+      - name: Run chart-testing (lint)
+        run: ct lint --target-branch ${{ github.event.repository.default_branch }}
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.10.0
+      - name: Run chart-testing (install)
+        run: ct install --chart-dirs chart/ --charts chart/ --debug
