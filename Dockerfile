@@ -1,10 +1,10 @@
-FROM alpine:3.19
+FROM alpine:3.20
 ARG TARGETARCH
 RUN apk upgrade
 
 WORKDIR /opt/speedupdate
 
-COPY speedupdateserver ./speedupdateserver
+COPY speedupdate-$TARGETARCH/ .
 
 EXPOSE 3000
 EXPOSE 3001
