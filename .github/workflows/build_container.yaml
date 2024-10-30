@@ -28,7 +28,7 @@ jobs:
 
   build_x86_64:
     runs-on: ubuntu-latest
-    container: messense/rust-musl-cross:aarch64-musl
+    container: messense/rust-musl-cross:x86_64-musl
     steps:
       - uses: actions/checkout@v4
       - name: Build
