@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: ludea/speedupdate
   pullPolicy: Always
-  tag: "0.10.0"
+  tag: "latest"
 
 imagePullSecrets: []
 nameOverride: ""
