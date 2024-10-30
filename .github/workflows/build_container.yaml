@@ -67,7 +67,6 @@ jobs:
           push: true
           tags: ludea/speedupdate:latest
           platforms: linux/amd64, linux/arm64
-          target: alpine 
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
