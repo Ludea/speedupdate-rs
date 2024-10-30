@@ -5,6 +5,8 @@ RUN apk upgrade
 WORKDIR /opt/speedupdate
 
 COPY speedupdate-$TARGETARCH/ .
+RUN chmod +x speedupdateserver
+RUN chmod +x speedupdate
 
 EXPOSE 3000
 EXPOSE 3001
