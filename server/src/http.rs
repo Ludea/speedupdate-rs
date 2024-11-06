@@ -44,7 +44,7 @@ pub async fn http_api() {
     let local_addr = listener.local_addr().unwrap();
     tracing::info!("HTTP listening on {local_addr}");
 
-    let serve_dir = ServeDir::new("/home/ludea/allo");
+    let serve_dir = ServeDir::new("/opt/speedupdate");
     let recorder_handle = setup_metrics_recorder();
 
     if let Err(err) = tokio::fs::create_dir_all(UPLOADS_DIRECTORY).await {
