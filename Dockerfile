@@ -4,9 +4,11 @@ RUN apk upgrade
 
 WORKDIR /opt/speedupdate
 
-COPY speedupdate-$TARGETARCH/ .
+COPY speedupdate-$TARGETARCH/speedupdate /usr/local/bin/speedupdate
+COPY speedupdate-$TARGETARCH/speedupdateserver .
+
 RUN chmod +x speedupdateserver
-RUN chmod +x speedupdate
+RUN chmod +x /usr/local/bin/speedupdate
 
 EXPOSE 3000
 EXPOSE 3001
