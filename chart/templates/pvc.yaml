@@ -1,8 +1,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: speedupdate-pvc
-  namespace: speedupdate
+  name: {{ include "speedupdate_chart.fullname" . }}
+  labels:
+    {{- include "speedupdate_chart.labels" . | nindent 4 }}
 spec:
   accessModes:
     - ReadWriteOnce
