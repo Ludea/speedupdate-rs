@@ -29,36 +29,36 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
       - name: {{ .Chart.Name }}
-         securityContext:
+        securityContext:
            {{- toYaml .Values.securityContext | nindent 12 }}
-         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-         imagePullPolicy: {{ .Values.image.pullPolicy }}
-         volumeMounts:
-         - name: local-volume
-           mountPath: /data
-         ports:
-           - name: http
-             containerPort: 8080
-             protocol: TCP
-           - name: grpc
-             containerPort: 3000
-             protocol: TCP
-           - name: ftp
-             containerPort: 2121
-             protocol: TCP
-           - name: metrics
-             containerPort: 3001
-             protocol: TCP
-         livenessProbe:
-           httpGet:
-             path: /health
-             port: 8080
-         readinessProbe:
-           httpGet:
-             path: /health
-             port: 8080
-         resources:
-           {{- toYaml .Values.resources | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        volumeMounts:
+        - name: local-volume
+          mountPath: /data
+        ports:
+          - name: http
+            containerPort: 8080
+            protocol: TCP
+          - name: grpc
+            containerPort: 3000
+            protocol: TCP
+          - name: ftp
+            containerPort: 2121
+            protocol: TCP
+          - name: metrics
+            containerPort: 3001
+            protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
       volumes:
       - name: local-volume
         persistentVolumeClaim:
