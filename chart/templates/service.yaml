@@ -8,19 +8,19 @@ spec:
   type: {{ .Values.service.type }}
   ports:
     - port: {{ .Values.service.httpport }}
-      targetPort: http
+      targetPort: 8080
       protocol: TCP
       name: http
     - port: {{ .Values.service.grpcport }}
-      targetPort: grpc
+      targetPort: 3000
       protocol: TCP
       name: grpc
     - port: {{ .Values.service.ftpport }}
-      targetPort: ftp
+      targetPort: 2121
       protocol: TCP
       name: ftp
     - port: {{ .Values.service.metricport }}
-      targetPort: metrics
+      targetPort: 3001
       protocol: TCP
       name: metrics
   selector:
