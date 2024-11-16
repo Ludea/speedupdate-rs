@@ -10,6 +10,7 @@ COPY speedupdate-$TARGETARCH/speedupdateserver .
 RUN chmod +x speedupdateserver
 RUN chmod +x /usr/local/bin/speedupdate
 
+COPY pkey .
 EXPOSE 3000
 EXPOSE 3001
 EXPOSE 8080
