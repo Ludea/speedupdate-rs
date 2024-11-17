@@ -568,7 +568,7 @@ pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
     Server::builder()
         .accept_http1(true)
         .layer(cors_layer)
-        .layer(layer)
+     //   .layer(layer)
         .layer(GrpcWebLayer::new())
         .add_service(service)
         .serve(addr)
