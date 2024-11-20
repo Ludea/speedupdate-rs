@@ -68,7 +68,7 @@ impl Repo for RemoteRepository {
         } else {
             match repo.init() {
                 Ok(_) => {
-                    tracing::info!("Repository initialized at {}", repository_path);
+                    tracing::info!("Repository initialized at {repository_path}");
                     return Ok(Response::new(reply));
                 }
                 Err(err) => {
