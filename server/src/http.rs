@@ -1,6 +1,6 @@
 use axum::{
     body::Bytes,
-    extract::{MatchedPath, Multipart, Request},
+    extract::{MatchedPath, Multipart, Path, Request},
     http::StatusCode,
     middleware::{self, Next},
     response::IntoResponse,
@@ -9,7 +9,7 @@ use axum::{
 };
 use futures::{Stream, TryStreamExt};
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use std::{fs, future::ready, io, net::SocketAddr, path::Path};
+use std::{fs, future::ready, io, net::SocketAddr};
 use tokio::{fs::File, io::BufWriter};
 use tokio_util::io::StreamReader;
 use tower_http::{
@@ -56,7 +56,7 @@ pub async fn http_api() {
         .route_layer(middleware::from_fn(track_metrics))
         .route("/health", get(health_check))
         .route("/metrics", get(move || ready(recorder_handle.render())))
-        .route("/file/:file_name", post(accept_form))
+        .route("/file/{file_name}", post(save_request_body))
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
         .layer(TraceLayer::new_for_http());
 
@@ -91,34 +91,18 @@ where
         return Err((StatusCode::BAD_REQUEST, "Invalid path".to_owned()));
     }
 
+    tracing::info!("Upload file: {:?}", path);
     async {
-        // Convert the stream into an `AsyncRead`.
         let body_with_io_error = stream.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
         let body_reader = StreamReader::new(body_with_io_error);
         futures::pin_mut!(body_reader);
 
-        if let Some(file_stem_os) = Path::new(&path).file_stem() {
-            if let Some(file_stem_str) = file_stem_os.to_str() {
-                let path = std::path::Path::new(UPLOADS_DIRECTORY).join(file_stem_str).join(path);
-                if let Err(err) =
-                    fs::create_dir_all(UPLOADS_DIRECTORY.to_owned() + "/" + file_stem_str)
-                {
-                    tracing::error!("Error when creating folder: {}", err);
-                }
-                let mut file = BufWriter::new(File::create(path).await.unwrap());
+        let path = std::path::Path::new(UPLOADS_DIRECTORY).join(path);
+        let mut file = BufWriter::new(File::create(path).await?);
 
-                if let Err(err) = tokio::io::copy(&mut body_reader, &mut file).await {
-                    tracing::error!("Error when trying to copy file: {}", err);
-                }
-                Ok(())
-            } else {
-                tracing::error!("File name is not valid");
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
-            }
-        } else {
-            tracing::error!("File don't have valid name");
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
+        tokio::io::copy(&mut body_reader, &mut file).await?;
+
+        Ok::<_, io::Error>(())
     }
     .await
     .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
@@ -137,11 +121,9 @@ fn path_is_valid(path: &str) -> bool {
     components.count() == 1
 }
 
-async fn accept_form(mut multipart: Multipart) -> Result<(), (StatusCode, String)> {
-    while let Some(field) = multipart.next_field().await.unwrap() {
-        let file_name = field.file_name().unwrap().to_string();
-
-        stream_to_file(&file_name, field).await?
-    }
-    Ok(())
+async fn save_request_body(
+    Path(file_name): Path<String>,
+    request: Request,
+) -> Result<(), (StatusCode, String)> {
+    stream_to_file(&file_name, request.into_body().into_data_stream()).await
 }
