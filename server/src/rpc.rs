@@ -558,7 +558,7 @@ pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
 
     let origins = [
     "http://localhost:8080".parse().unwrap(),
-    "http://localhost:8000".parse().unwrap(),
+    "http://localhost:5173".parse().unwrap(),
     "https://web.marlin-atlas.ts.net".parse().unwrap(),
 ];
 
