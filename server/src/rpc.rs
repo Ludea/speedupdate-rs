@@ -556,7 +556,13 @@ pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
         .send_compressed(CompressionEncoding::Gzip)
         .accept_compressed(CompressionEncoding::Gzip);
 
-    let cors_layer = CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any);
+    let origins = [
+    "http://localhost:8080".parse().unwrap(),
+    "http://localhost:8000".parse().unwrap(),
+    "https://web.marlin-atlas.ts.net".parse().unwrap(),
+];
+
+    let cors_layer = CorsLayer::new().allow_origin(origins).allow_headers(Any).expose_headers(Any);
 
     let layer = tower::ServiceBuilder::new()
         .timeout(Duration::from_secs(30))
