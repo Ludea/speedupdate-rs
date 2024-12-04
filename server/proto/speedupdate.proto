@@ -19,8 +19,16 @@ service Repo {
   rpc Build (BuildInput) returns (stream BuildOutput);
 }
 
+enum Platforms {
+  WIN64 = 0;
+  MACOS_X86_64 = 1;
+  MACOS_ARM64 = 2;
+  LINUX = 3;
+}
+
 message RepositoryPath {
   string path = 1;
+  Platforms platform = 2;
 }
 
 message FileToDelete {
