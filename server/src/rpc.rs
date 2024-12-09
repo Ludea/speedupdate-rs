@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
     BuildInput, BuildOutput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Package,
-    RepoStatus, RepositoryPath, Version, Versions,
+    Platforms, RepoStatus, RepoStatusOutput, RepositoryPath, RepositoryStatus, Version, Versions,
 };
 use std::{
     fs,
@@ -51,7 +51,7 @@ struct Claims {
     scope: String,
 }
 
-type ResponseStatusStream = Pin<Box<dyn Stream<Item = Result<RepoStatus, Status>> + Send>>;
+type ResponseStatusStream = Pin<Box<dyn Stream<Item = Result<RepoStatusOutput, Status>> + Send>>;
 type ResponseBuildStream = Pin<Box<dyn Stream<Item = Result<BuildOutput, Status>> + Send>>;
 
 pub struct RemoteRepository {}
@@ -95,18 +95,31 @@ impl Repo for RemoteRepository {
 
     async fn status(
         &self,
-        request: Request<RepositoryPath>,
+        request: Request<RepositoryStatus>,
     ) -> Result<Response<Self::StatusStream>, Status> {
-        let repository_path = request.into_inner().path;
-        let repo_request = repository_path.clone(); //Arc::clone(&repository_path);
-        let repo_watch = repository_path.clone();
+        let inner = request.into_inner();
+        let repo_request = inner.path.clone();
+        let repo_watch = inner.path.clone();
+        let platforms = inner.platforms;
+        let mut subfolders = Vec::new();
+        for host in platforms.clone() {
+            match Platforms::try_from(host) {
+                Ok(Platforms::Win64) => subfolders.push("/win64"),
+                Ok(Platforms::MacosX8664) => subfolders.push("/macos_x86_64"),
+                Ok(Platforms::MacosArm64) => subfolders.push("/macos_arm64"),
+                Ok(Platforms::Linux) => subfolders.push("/linux"),
+                _ => {}
+            }
+        }
 
         let request_future = async move {
-            let state = match repo_state(repo_request.clone()) {
-                Ok(local_state) => local_state,
-                Err(err) => return Err(Status::internal(err)),
-            };
-
+            let mut state = RepoStatusOutput { status: Vec::new() };
+            for folder in subfolders.clone() {
+                state.status.push(match repo_state(repo_request.clone() + "/" + folder) {
+                    Ok(local_state) => local_state,
+                    Err(err) => return Err(Status::internal(err)),
+                });
+            }
             let (local_tx, mut local_rx) = mpsc::channel(1);
             let (tx, rx) = mpsc::channel(128);
 
@@ -125,41 +138,48 @@ impl Repo for RemoteRepository {
                 config,
             )
             .unwrap();
-            if Path::new(&(repo_request.clone() + "/current")).exists() {
+            for folder in subfolders.clone() {
+                if Path::new(&(repo_request.clone() + folder + "/current")).exists() {
+                    watcher
+                        .watch(
+                            Path::new(&(repo_request.clone() + folder + "/current")),
+                            RecursiveMode::NonRecursive,
+                        )
+                        .unwrap();
+                }
                 watcher
                     .watch(
-                        Path::new(&(repo_request.clone() + "/current")),
+                        Path::new(&(repo_request.clone() + folder + "/packages")),
                         RecursiveMode::NonRecursive,
                     )
                     .unwrap();
-            }
-            watcher
-                .watch(
-                    Path::new(&(repo_request.clone() + "/packages")),
-                    RecursiveMode::NonRecursive,
-                )
-                .unwrap();
-            watcher
-                .watch(
-                    Path::new(&(repo_request.clone() + "/versions")),
-                    RecursiveMode::NonRecursive,
-                )
-                .unwrap();
-            if Path::new(&(repo_request.clone() + "/.build")).exists() {
                 watcher
-                    .watch(Path::new(&(repo_request + "/.build")), RecursiveMode::NonRecursive)
+                    .watch(
+                        Path::new(&(repo_request.clone() + folder + "/versions")),
+                        RecursiveMode::NonRecursive,
+                    )
                     .unwrap();
+                if Path::new(&(repo_request.clone() + folder + "/.build")).exists() {
+                    watcher
+                        .watch(
+                            Path::new(&(repo_request.clone() + folder + "/.build")),
+                            RecursiveMode::NonRecursive,
+                        )
+                        .unwrap();
+                }
             }
+            let mut repo_array = RepoStatusOutput { status: Vec::new() };
 
             tokio::task::spawn(async move {
                 let _watcher = watcher;
                 while let Some(Ok(_)) = local_rx.recv().await {
-                    match repo_state(repo_watch.clone()) {
+                    match repo_state(repo_watch.clone() + folder) {
                         Ok(new_state) => {
-                            send_message(tx.clone(), new_state);
+                            repo_array.status.push(new_state);
                         }
                         Err(err) => { Err(Status::internal(err)) }.unwrap(),
                     };
+                    send_message(tx.clone(), repo_array.clone());
                 }
             });
 
@@ -168,7 +188,7 @@ impl Repo for RemoteRepository {
         };
 
         let cancellation_future = async move {
-            tracing::info!("Stop streaming {} status", repository_path);
+            tracing::info!("Stop streaming {} status", inner.path);
             Err(Status::cancelled("Request cancelled by client"))
         };
 
@@ -521,7 +541,10 @@ fn repo_state(path: String) -> Result<RepoStatus, String> {
     Ok(state)
 }
 
-fn send_message(tx: tokio::sync::mpsc::Sender<Result<RepoStatus, Status>>, message: RepoStatus) {
+fn send_message(
+    tx: tokio::sync::mpsc::Sender<Result<RepoStatusOutput, Status>>,
+    message: RepoStatusOutput,
+) {
     tokio::spawn(async move {
         let _ = tx.send(Result::<_, Status>::Ok(message)).await;
     });
@@ -557,10 +580,10 @@ pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
         .accept_compressed(CompressionEncoding::Gzip);
 
     let origins = [
-    "http://localhost:8080".parse().unwrap(),
-    "http://localhost:5173".parse().unwrap(),
-    "https://web.marlin-atlas.ts.net".parse().unwrap(),
-];
+        "http://localhost:8080".parse().unwrap(),
+        "http://localhost:5173".parse().unwrap(),
+        "https://web.marlin-atlas.ts.net".parse().unwrap(),
+    ];
 
     let cors_layer = CorsLayer::new().allow_origin(origins).allow_headers(Any).expose_headers(Any);
 

@@ -5,7 +5,7 @@ package speedupdate;
 service Repo {
   rpc Init (RepositoryPath) returns (Empty);
   rpc Is_init (RepositoryPath) returns (Empty);
-  rpc Status (RepositoryPath) returns (stream RepoStatus);
+  rpc Status (RepositoryStatus) returns (stream RepoStatusOutput);
   rpc Set_current_version (Version) returns (Empty);
   rpc Get_current_version (RepositoryPath) returns (CurrentVersion);
   rpc Register_version (Version) returns (Empty);
@@ -28,7 +28,11 @@ enum Platforms {
 
 message RepositoryPath {
   string path = 1;
-  Platforms platform = 2;
+}
+
+message RepositoryStatus {
+  string path = 1;
+  repeated Platforms platforms = 2;
 }
 
 message FileToDelete {
@@ -47,6 +51,10 @@ message RepoStatus {
   repeated string available_packages = 4;
   repeated string available_binaries = 5;
   uint64 size = 6; 
+}
+
+message RepoStatusOutput {
+  repeated RepoStatus status = 1;
 }
 
 message Version {
