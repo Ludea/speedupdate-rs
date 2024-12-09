@@ -135,7 +135,7 @@ impl<'a> UpdatePackageStream<'a> {
     }
 }
 
-impl<'a> Stream for UpdatePackageStream<'a> {
+impl Stream for UpdatePackageStream<'_> {
     type Item = Result<SharedUpdateProgress, UpdateError>;
 
     fn poll_next(
