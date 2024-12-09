@@ -240,6 +240,18 @@ impl UpdateFilter {
 pub type GlobalProgressStream<'a> =
     Pin<Box<dyn Stream<Item = Result<SharedUpdateProgress, UpdateError>> + 'a>>;
 
+struct UpdateArg<'a, R> {
+    update_options: UpdateOptions,
+    file_manager: WorkspaceFileManager,
+    global_progression: SharedUpdateProgress,
+    initial_state: State,
+    shared_state: Rc<RefCell<StateUpdating>>,
+    repository: &'a R,
+    goal_version: metadata::CleanName,
+    filter: UpdateFilter,
+    main_stage: UpdateStage,
+}
+
 // get -> stream of bytes -> write -> progression
 // progression -> apply -> progression
 
@@ -285,7 +297,7 @@ where
     };
 
     let shared_state_n =
-        Rc::new(RefCell::new(StateUpdating::new(None, goal_version.clone(), failures)));
+        Rc::new(RefCell::new(StateUpdating::new(None, goal_version.clone(), failures.clone())));
     let shared_state_r = shared_state_n.clone();
     let shared_state_s = shared_state_n.clone();
     let shared_state_c = shared_state_n.clone();
@@ -323,20 +335,32 @@ where
     }));
     let write_state_c = write_state_nr.clone();
 
-    // 1. try to the update normally
-    let normal_stream = update_internal(
-        update_options,
-        file_manager_n,
-        global_progression_n,
-        workspace_state,
-        shared_state_n,
-        repository,
-        goal_version_n,
-        UpdateFilter::allows_all(),
-        UpdateStage::Updating,
-    )
-    .try_flatten_stream();
+    let normal_update_arg = UpdateArg {
+        update_options: update_options,
+        file_manager: file_manager_n,
+        global_progression: global_progression_n,
+        initial_state: workspace_state,
+        shared_state: shared_state_n,
+        repository: repository,
+        goal_version: goal_version_n,
+        filter: UpdateFilter::allows_all(),
+        main_stage: UpdateStage::Updating,
+    };
 
+    // 1. try to the update normally
+    let normal_stream = update_internal(normal_update_arg).try_flatten_stream();
+
+    let repair_update_arg = UpdateArg {
+        update_options: update_options_r,
+        file_manager: file_manager_r,
+        global_progression: global_progression_r.clone(),
+        initial_state: State::New, //< force to repair from no starting revision,
+        shared_state: shared_state_r.clone(),
+        repository: repository,
+        goal_version: goal_version_r,
+        filter: UpdateFilter { failures },
+        main_stage: UpdateStage::Repairing,
+    };
     // 2. try to repair update errors
     let repair_stream = future::lazy(move |_| {
         let mut failures = {
@@ -347,20 +371,7 @@ where
         if !failures.is_empty() {
             failures.sort();
             global_progression_r.borrow_mut().stage = UpdateStage::FindingRepairPath;
-            Either::Left(
-                update_internal(
-                    update_options_r,
-                    file_manager_r,
-                    global_progression_r,
-                    State::New, //< force to repair from no starting revision
-                    shared_state_r,
-                    repository,
-                    goal_version_r,
-                    UpdateFilter { failures },
-                    UpdateStage::Repairing,
-                )
-                .try_flatten_stream(),
-            )
+            Either::Left(update_internal(repair_update_arg).try_flatten_stream())
         } else {
             // nothing to repair, everything went well
             Either::Right(stream::empty())
@@ -438,32 +449,29 @@ where
 }
 
 async fn update_internal<'a, R>(
-    update_options: UpdateOptions,
-    file_manager: WorkspaceFileManager,
-    global_progression: SharedUpdateProgress,
-    initial_state: State,
-    shared_state: Rc<RefCell<StateUpdating>>,
-    repository: &'a R,
-    goal_version: metadata::CleanName,
-    filter: UpdateFilter,
-    main_stage: UpdateStage,
+    update_arg: UpdateArg<'a, R>,
 ) -> Result<impl Stream<Item = Result<SharedUpdateProgress, UpdateError>> + 'a, UpdateError>
 where
     R: RemoteRepository,
 {
-    let maybe_path =
-        update_path(initial_state, repository, &goal_version, update_options.check).await?;
+    let maybe_path = update_path(
+        update_arg.initial_state,
+        update_arg.repository,
+        &update_arg.goal_version,
+        update_arg.update_options.check,
+    )
+    .await?;
     let packages_metadata = match maybe_path {
         Some((packages_metadata, first_package_state)) => {
             // Update global progress with objectives
-            global_progression.borrow_mut().push_steps(
+            update_arg.global_progression.borrow_mut().push_steps(
                 &packages_metadata,
                 &first_package_state,
-                &filter,
+                &update_arg.filter,
             );
 
             // Setup shared workspace state
-            shared_state.borrow_mut().update_with(first_package_state);
+            update_arg.shared_state.borrow_mut().update_with(first_package_state);
 
             packages_metadata
         }
@@ -471,10 +479,10 @@ where
     };
 
     {
-        global_progression.borrow_mut().stage = main_stage;
+        update_arg.global_progression.borrow_mut().stage = update_arg.main_stage;
     }
 
-    let state_p = shared_state.clone();
+    let state_p = update_arg.shared_state.clone();
 
     let update_package_stream = packages_metadata.into_iter().map(move |package_metadata| {
         // Update workspace updating state details
@@ -498,11 +506,11 @@ where
             .enumerate()
             .filter_map(|(idx, o)| {
                 let maybe_o = if !check_only {
-                    filter.filter_map(o).map(|o| (idx, Arc::new(o)))
+                    update_arg.filter.filter_map(o).map(|o| (idx, Arc::new(o)))
                 } else {
                     None
                 };
-                if maybe_o.is_none() && update_options.check {
+                if maybe_o.is_none() && update_arg.update_options.check {
                     o.as_check_operation().map(|o| (idx, Arc::new(o)))
                 } else {
                     maybe_o
@@ -515,22 +523,22 @@ where
             let check_operations: Vec<metadata::v1::Operation> =
                 package_metadata.iter().filter_map(|o| o.as_check_operation()).collect();
             let checks = metadata::WorkspaceChecks::V1 { operations: check_operations };
-            file_manager.write_checks(&checks).map_err(UpdateError::LocalCheckError)?;
+            update_arg.file_manager.write_checks(&checks).map_err(UpdateError::LocalCheckError)?;
         }
 
         // Build downloader & applier stream
         let normal_stream = UpdatePackageStream::new(
-            update_options.clone(),
+            update_arg.update_options.clone(),
             state_p.clone(),
-            global_progression.clone(),
-            file_manager.clone(),
-            repository,
+            update_arg.global_progression.clone(),
+            update_arg.file_manager.clone(),
+            update_arg.repository,
             &package_metadata.package_data_name(),
             operations,
         )?;
 
         let state_c = state_p.clone();
-        let global_progression_c = global_progression.clone();
+        let global_progression_c = update_arg.global_progression.clone();
         let commit_stream = future::lazy(move |_| {
             debug!("end update package");
             let state = &mut *state_c.borrow_mut();
