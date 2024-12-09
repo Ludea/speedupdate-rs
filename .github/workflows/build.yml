@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [macos-12, ubuntu-22.04, windows-2022]
+        platform: [macos-14, ubuntu-24.04, windows-2022]
             
     runs-on: ${{ matrix.platform }}        
     steps:
@@ -27,13 +27,13 @@ jobs:
         run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $env:GITHUB_ENV 
     
       - name: install deps
-        if: matrix.platform == 'ubuntu-22.04' 
+        if: matrix.platform == 'ubuntu-24.04' 
         run: sudo apt update && sudo apt install -y musl-dev musl-tools
       - name: 'Setup Rust on Windows and MacOS'
-        if: matrix.platform != 'ubuntu-22.04' 
+        if: matrix.platform != 'ubuntu-24.04' 
         uses: dtolnay/rust-toolchain@stable
       - name: 'Setup Rust on Linux'
-        if: matrix.platform == 'ubuntu-22.04' 
+        if: matrix.platform == 'ubuntu-24.04' 
         uses: dtolnay/rust-toolchain@stable
         with: 
           targets: x86_64-unknown-linux-musl
@@ -43,13 +43,13 @@ jobs:
       - name: Fmt
         run: cargo fmt --all -- --check
       - name: Build Linux binaries
-        if: matrix.platform == 'ubuntu-22.04' 
+        if: matrix.platform == 'ubuntu-24.04' 
         run: cargo build --release --verbose --target x86_64-unknown-linux-musl
       - name: Build Macos and Windows binaries
-        if: matrix.platform != 'Ubuntu-22.04'
+        if: matrix.platform != 'Ubuntu-24.04'
         run: cargo build --release --verbose 
       - name: Move macOS bin
-        if: matrix.platform == 'macos-12'
+        if: matrix.platform == 'macos-14'
         run: |
           mv target/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
           mv target/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
@@ -59,7 +59,7 @@ jobs:
           mv target/release/speedupdate.exe target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64.exe
           mv target/release/speedupdateserver.exe target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64.exe
       - name: Move x86_64 Linux binaries
-        if: matrix.platform == 'ubuntu-22.04' 
+        if: matrix.platform == 'ubuntu-24.04' 
         run: |
           mv target/x86_64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
           mv target/x86_64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
@@ -73,10 +73,9 @@ jobs:
             target/release/speedupdateserver-*
           
   build-aarch64-linux:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     container: 
       image: messense/rust-musl-cross:aarch64-musl
-    #  options: --user 1001
     steps:
     - uses: actions/checkout@v4
     - run: git config --global --add safe.directory /__w/speedupdate-rs/speedupdate-rs 
@@ -94,7 +93,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_ubuntu-22.04_aarch64
+        name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_aarch64
         if-no-files-found: error
         path: |
           target/aarch64-unknown-linux-musl/release/speedupdate-*
