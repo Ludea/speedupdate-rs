@@ -336,12 +336,12 @@ where
     let write_state_c = write_state_nr.clone();
 
     let normal_update_arg = UpdateArg {
-        update_options: update_options,
+        update_options,
         file_manager: file_manager_n,
         global_progression: global_progression_n,
         initial_state: workspace_state,
         shared_state: shared_state_n,
-        repository: repository,
+        repository,
         goal_version: goal_version_n,
         filter: UpdateFilter::allows_all(),
         main_stage: UpdateStage::Updating,
@@ -356,7 +356,7 @@ where
         global_progression: global_progression_r.clone(),
         initial_state: State::New, //< force to repair from no starting revision,
         shared_state: shared_state_r.clone(),
-        repository: repository,
+        repository,
         goal_version: goal_version_r,
         filter: UpdateFilter { failures },
         main_stage: UpdateStage::Repairing,
