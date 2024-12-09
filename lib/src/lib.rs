@@ -30,13 +30,13 @@ pub mod tests {
     #[derive(Eq, PartialEq)]
     pub struct Bytes<'a>(pub &'a [u8]);
 
-    impl<'a> fmt::Debug for Bytes<'a> {
+    impl fmt::Debug for Bytes<'_> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             fmt::Display::fmt(self, f)
         }
     }
 
-    impl<'a> fmt::Display for Bytes<'a> {
+    impl fmt::Display for Bytes<'_> {
         fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
             write!(fmt, "b\"")?;
             for &byte in self.0.iter() {

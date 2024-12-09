@@ -56,7 +56,7 @@ pub struct CheckProgression {
     pub failed_files: usize,
 }
 
-impl<'a, 'b> Add<&'a CheckProgression> for &'b CheckProgression {
+impl<'a> Add<&'a CheckProgression> for &CheckProgression {
     type Output = CheckProgression;
 
     fn add(self, other: &'a CheckProgression) -> CheckProgression {
@@ -78,7 +78,7 @@ impl<'a> AddAssign<&'a CheckProgression> for CheckProgression {
     }
 }
 
-impl<'a, 'b> Sub<&'a CheckProgression> for &'b CheckProgression {
+impl<'a> Sub<&'a CheckProgression> for &CheckProgression {
     type Output = CheckProgression;
 
     fn sub(self, other: &'a CheckProgression) -> CheckProgression {
@@ -358,7 +358,7 @@ pub struct Progression {
     pub failed_files: usize,
 }
 
-impl<'a, 'b> Add<&'a Progression> for &'b Progression {
+impl<'a> Add<&'a Progression> for &Progression {
     type Output = Progression;
 
     fn add(self, other: &'a Progression) -> Progression {
@@ -388,7 +388,7 @@ impl<'a> AddAssign<&'a Progression> for Progression {
     }
 }
 
-impl<'a, 'b> Sub<&'a Progression> for &'b Progression {
+impl<'a> Sub<&'a Progression> for &Progression {
     type Output = Progression;
 
     fn sub(self, other: &'a Progression) -> Progression {
