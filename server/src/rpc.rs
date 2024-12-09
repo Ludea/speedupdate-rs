@@ -138,6 +138,7 @@ impl Repo for RemoteRepository {
                 config,
             )
             .unwrap();
+
             for folder in subfolders.clone() {
                 if Path::new(&(repo_request.clone() + folder + "/current")).exists() {
                     watcher
@@ -173,12 +174,14 @@ impl Repo for RemoteRepository {
             tokio::task::spawn(async move {
                 let _watcher = watcher;
                 while let Some(Ok(_)) = local_rx.recv().await {
-                    match repo_state(repo_watch.clone() + folder) {
-                        Ok(new_state) => {
-                            repo_array.status.push(new_state);
-                        }
-                        Err(err) => { Err(Status::internal(err)) }.unwrap(),
-                    };
+                    for folder in subfolders.clone() {
+                        match repo_state(repo_watch.clone() + folder) {
+                            Ok(new_state) => {
+                                repo_array.status.push(new_state);
+                            }
+                            Err(err) => { Err(Status::internal(err)) }.unwrap(),
+                        };
+                    }
                     send_message(tx.clone(), repo_array.clone());
                 }
             });
