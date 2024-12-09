@@ -15,7 +15,7 @@ impl<'a> Handler<'a> {
     }
 }
 
-impl<'a> super::ApplyHandler for Handler<'a> {
+impl super::ApplyHandler for Handler<'_> {
     fn download_operation_path(&self) -> PathBuf {
         self.ctx.download_operation_path()
     }

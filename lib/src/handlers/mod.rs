@@ -20,7 +20,7 @@ pub struct HandlerContext<'a> {
     pub update_options: &'a UpdateOptions,
 }
 
-impl<'a> HandlerContext<'a> {
+impl HandlerContext<'_> {
     pub fn final_path(&self, path: &metadata::CleanPath) -> PathBuf {
         self.file_manager.dir().join(path)
     }
@@ -245,7 +245,7 @@ impl ApplyOperation for metadata::v1::Operation {
             ));
         }
 
-        return Ok(Box::new(DefaultHandler::new(ctx)));
+        Ok(Box::new(DefaultHandler::new(ctx)))
     }
 
     fn begin_apply<'a>(
