@@ -75,10 +75,10 @@ pub mod tests {
                 .map(|res| res.map(|e| e.file_name()))
                 .collect::<Result<BTreeSet<_>, _>>()
                 .unwrap();
-            for e in dir0.difference(&dir1) {
+            if let Some(e) = dir0.difference(&dir1) {
                 panic!("{:?} is not present in {:?}", e, path1);
             }
-            for e in dir1.difference(&dir0) {
+            if let Some(e) = dir1.difference(&dir0) {
                 panic!("{:?} is not present in {:?}", e, path0);
             }
             for (filename0, filename1) in dir0.iter().zip(dir1.iter()) {
