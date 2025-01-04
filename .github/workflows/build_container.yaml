@@ -9,7 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
-jobs: 
+jobs:
   build_aarch64:
     runs-on: ubuntu-latest
     container: messense/rust-musl-cross:aarch64-musl
@@ -41,7 +41,7 @@ jobs:
           path: |
             target/x86_64-unknown-linux-musl/release/speedupdateserver
             target/x86_64-unknown-linux-musl/release/speedupdate
-      
+
   build-container:
     runs-on: ubuntu-22.04
     needs: [build_aarch64, build_x86_64]
@@ -80,6 +80,6 @@ jobs:
       - name: Run chart-testing (lint)
         run: ct lint --target-branch ${{ github.event.repository.default_branch }}
       - name: Create kind cluster
-        uses: helm/kind-action@v1.11.0
+        uses: helm/kind-action@v1
       - name: Run chart-testing (install)
         run: ct install --chart-dirs chart/ --charts chart/ --debug
