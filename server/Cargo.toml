@@ -9,7 +9,7 @@ Speedupdate api
 """
 
 [dependencies]
-axum = { version = "0.7", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart"] }
 futures = { version = "0.3", default-features = false }
 #instant-acme = "0.7.1"
 #libunftp = "0.20"
