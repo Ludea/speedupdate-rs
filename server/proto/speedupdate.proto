@@ -28,11 +28,13 @@ enum Platforms {
 
 message RepositoryPath {
   string path = 1;
+  optional string build_path = 2;
 }
 
 message RepositoryStatus {
   string path = 1;
   repeated Platforms platforms = 2;
+  optional string build_path = 3;
 }
 
 message FileToDelete {

@@ -101,7 +101,12 @@ impl Repo for RemoteRepository {
         let repo_request = inner.path.clone();
         let repo_watch = inner.path.clone();
         let platforms = inner.platforms;
+        let build_path = inner.build_path;
+
+        let build_path = build_path.unwrap_or(".build".to_string());
+
         let mut subfolders = Vec::new();
+
         for host in platforms.clone() {
             match Platforms::try_from(host) {
                 Ok(Platforms::Win64) => subfolders.push("/win64"),
@@ -115,10 +120,12 @@ impl Repo for RemoteRepository {
         let request_future = async move {
             let mut state = RepoStatusOutput { status: Vec::new() };
             for folder in subfolders.clone() {
-                state.status.push(match repo_state(repo_request.clone() + "/" + folder) {
-                    Ok(local_state) => local_state,
-                    Err(err) => return Err(Status::internal(err)),
-                });
+                state.status.push(
+                    match repo_state(repo_request.clone() + "/" + folder, build_path.clone()) {
+                        Ok(local_state) => local_state,
+                        Err(err) => return Err(Status::internal(err)),
+                    },
+                );
             }
             let (local_tx, mut local_rx) = mpsc::channel(1);
             let (tx, rx) = mpsc::channel(128);
@@ -175,7 +182,7 @@ impl Repo for RemoteRepository {
                 let _watcher = watcher;
                 while let Some(Ok(_)) = local_rx.recv().await {
                     for folder in subfolders.clone() {
-                        match repo_state(repo_watch.clone() + folder) {
+                        match repo_state(repo_watch.clone() + folder, build_path.clone()) {
                             Ok(new_state) => {
                                 repo_array.status.push(new_state);
                             }
@@ -349,8 +356,12 @@ impl Repo for RemoteRepository {
     ) -> Result<Response<ListPackVerBin>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
+        let build_path = inner.build_path;
+
+        let build_path = build_path.unwrap_or(".build".to_string());
+
         let repo = Repository::new(PathBuf::from(repository_path));
-        match repo.available_packages(".build".to_string()) {
+        match repo.available_packages(build_path.to_string()) {
             Ok(pack) => {
                 let reply = ListPackVerBin { ver_pack_bin: pack };
                 Ok(Response::new(reply))
@@ -478,7 +489,7 @@ impl Repo for RemoteRepository {
     }
 }
 
-fn repo_state(path: String) -> Result<RepoStatus, String> {
+fn repo_state(path: String, build_path: String) -> Result<RepoStatus, String> {
     let repo = Repository::new(PathBuf::from(path));
     let mut list_versions: Vec<Versions> = Vec::new();
     match repo.versions() {
@@ -511,7 +522,7 @@ fn repo_state(path: String) -> Result<RepoStatus, String> {
         Err(error) => return Err("Packages : ".to_owned() + &error.to_string()),
     };
 
-    let available_packages = match repo.available_packages(".build".to_string()) {
+    let available_packages = match repo.available_packages(build_path) {
         Ok(pack) => pack,
         Err(err) => return Err("Available packages : ".to_owned() + &err.to_string()),
     };
@@ -575,7 +586,7 @@ where
 }
 
 pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "0.0.0.0:3000".parse().unwrap();
+    let addr = "0.0.0.0:3001".parse().unwrap();
 
     let repo = RemoteRepository {};
     let service = RepoServer::new(repo)
