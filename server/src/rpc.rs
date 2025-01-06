@@ -2,7 +2,7 @@ use futures::prelude::*;
 use libspeedupdate::{
     metadata::{v1, CleanName},
     repository::{BuildOptions, CoderOptions, PackageBuilder},
-    //    workspace::{UpdateOptions, Workspace},
+    workspace::{UpdateOptions, Workspace},
     Repository,
 };
 use notify::{Config, RecursiveMode, Watcher};
@@ -377,8 +377,8 @@ impl Repo for RemoteRepository {
         request: Request<BuildInput>,
     ) -> Result<Response<Self::BuildStream>, Status> {
         let inner = request.into_inner();
-        //        let repository_path = inner.path;
-        //        let repository = Repository::new(PathBuf::from(repository_path));
+        let repository_path = inner.path;
+        let repository = Repository::new(PathBuf::from(repository_path));
 
         let source_version = match CleanName::new(inner.version) {
             Ok(ver) => ver,
@@ -401,67 +401,67 @@ impl Repo for RemoteRepository {
         }
         let (tx, rx) = mpsc::channel(128);
 
-        /* if let Some(patchers) = Some(inner.patcher) {
+        if let Some(patchers) = Some(inner.patcher) {
             options.patchers =
                 patchers.iter().map(|s| CoderOptions::from_static_str(s).unwrap()).collect();
         }
-                if let Some(from) = Some(inner.from) {
-                    let mut prev_version = CleanName::new("".to_string()).unwrap();
-                    let prev_directory = builder.build_directory.join(".from");
-                    match fs::create_dir_all(&prev_directory) {
-                        Ok(_) => {
-                            prev_version = match CleanName::new(from.unwrap()) {
-                                Ok(ver) => ver,
-                                Err(err) => {
-                                    return Err(Status::internal(err.to_string()));
-                                }
-                            };
-                        }
+        /*        if let Some(from) = Some(inner.from) {
+            let mut prev_version = CleanName::new("".to_string()).unwrap();
+            let prev_directory = builder.build_directory.join(".from");
+            match fs::create_dir_all(&prev_directory) {
+                Ok(_) => {
+                    prev_version = match CleanName::new(from.unwrap()) {
+                        Ok(ver) => ver,
                         Err(err) => {
                             return Err(Status::internal(err.to_string()));
                         }
                     };
-                    let link = repository.link();
-                    let mut workspace = Workspace::open(&prev_directory).unwrap();
-                    let goal_version = Some(prev_version.clone());
-                    let mut update_stream = workspace.update(&link, goal_version, UpdateOptions::default());
-
-                    let state = match update_stream.next().await {
-                        Some(Ok(state)) => state,
-                        Some(Err(err)) => {
-                            return Err(Status::internal(err.to_string()));
-                        }
-                        None => unreachable!(),
-                    };
-                    let state = state.borrow();
-
-                    let progress = state.histogram.progress();
-                    let res = update_stream.try_for_each(|_state| future::ready(Ok(()))).await;
-                    if let Err(err) = res {
-                        return Err(Status::internal(err.to_string()));
-                    }
-                    match workspace.remove_metadata() {
-                        Ok(_) => (),
-                        Err(err) => {
-                            return Err(Status::internal(err.to_string()));
-                        }
-                    }
-                    builder.set_previous(prev_version, prev_directory);
                 }
+                Err(err) => {
+                    return Err(Status::internal(err.to_string()));
+                }
+            };
+            let link = repository.link();
+            let mut workspace = Workspace::open(&prev_directory).unwrap();
+            let goal_version = Some(prev_version.clone());
+            let mut update_stream = workspace.update(&link, goal_version, UpdateOptions::default());
 
-                let mut build_stream = builder.build();
-        match build_stream.next().await {
+            let state = match update_stream.next().await {
+                Some(Ok(state)) => state,
+                Some(Err(err)) => {
+                    return Err(Status::internal(err.to_string()));
+                }
+                None => unreachable!(),
+            };
+            let state = state.borrow();
+
+            let progress = state.histogram.progress();
+            let res = update_stream.try_for_each(|_state| future::ready(Ok(()))).await;
+            if let Err(err) = res {
+                return Err(Status::internal(err.to_string()));
+            }
+            match workspace.remove_metadata() {
+                Ok(_) => (),
+                Err(err) => {
+                    return Err(Status::internal(err.to_string()));
+                }
+            }
+            builder.set_previous(prev_version, prev_directory);
+        }*/
+
+        let mut build_stream = builder.build();
+        /* match build_stream.next().await {
             Some(Ok(state)) => state,
             Some(Err(err)) => {
                 return Err(Status::internal(err.to_string()));
             }
             None => unreachable!(),
-        };
+        };*/
 
-        let res = build_stream.try_for_each(|_state| future::ready(Ok(()))).await;
+        /*let res = build_stream.try_for_each(|_state| future::ready(Ok(()))).await;
         if let Err(err) = res {
             return Err(Status::internal(err.to_string()));
-        } */
+        }*/
 
         let reply = BuildOutput { downloaded_bytes_start: 0, downloaded_bytes_end: 0 };
         tokio::spawn(async move {

@@ -1,24 +1,19 @@
 use axum::{
-    body::Bytes,
     extract::{MatchedPath, Multipart, Path, Request},
     http::StatusCode,
     middleware::{self, Next},
     response::IntoResponse,
     routing::{get, post},
-    BoxError, Router,
+    Router,
 };
-use futures::{Stream, TryStreamExt};
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use std::{fs, future::ready, io, net::SocketAddr};
-use tokio::{fs::File, io::BufWriter};
-use tokio_util::io::StreamReader;
+use std::{fs, future::ready, net::SocketAddr};
+use tokio::{fs::File, io::AsyncWriteExt};
 use tower_http::{
     cors::{Any, CorsLayer},
     services::ServeDir,
     trace::TraceLayer,
 };
-
-const UPLOADS_DIRECTORY: &str = "uploads";
 
 async fn health_check() -> &'static str {
     "OK"
@@ -44,19 +39,15 @@ pub async fn http_api() {
     let local_addr = listener.local_addr().unwrap();
     tracing::info!("HTTP listening on {local_addr}");
 
-    let serve_dir = ServeDir::new("/opt/speedupdate");
+    let serve_dir = ServeDir::new(".");
     let recorder_handle = setup_metrics_recorder();
 
-    if let Err(err) = tokio::fs::create_dir_all(UPLOADS_DIRECTORY).await {
-        tracing::error!("failed to create `uploads` directory: {}", err);
-    }
-
     let app = Router::new()
-        .nest_service("/", serve_dir.clone())
-        .route_layer(middleware::from_fn(track_metrics))
         .route("/health", get(health_check))
         .route("/metrics", get(move || ready(recorder_handle.render())))
-        .route("/file/{file_name}", post(save_request_body))
+        .route("/{repo}/{folder}", post(save_request_body))
+        .fallback_service(serve_dir)
+        .route_layer(middleware::from_fn(track_metrics))
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
         .layer(TraceLayer::new_for_http());
 
@@ -70,60 +61,45 @@ async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
         req.uri().path().to_owned()
     };
     let method = req.method().clone();
-
     let response = next.run(req).await;
-
     let status = response.status().as_u16().to_string();
-
     let labels = [("method", method.to_string()), ("path", path), ("status", status)];
-
     metrics::counter!("http_requests_total", &labels).increment(1);
-
     response
 }
 
-async fn stream_to_file<S, E>(path: &str, stream: S) -> Result<(), (StatusCode, String)>
-where
-    S: Stream<Item = Result<Bytes, E>>,
-    E: Into<BoxError>,
-{
-    if !path_is_valid(path) {
-        return Err((StatusCode::BAD_REQUEST, "Invalid path".to_owned()));
-    }
-
-    tracing::info!("Upload file: {:?}", path);
-    async {
-        let body_with_io_error = stream.map_err(|err| io::Error::new(io::ErrorKind::Other, err));
-        let body_reader = StreamReader::new(body_with_io_error);
-        futures::pin_mut!(body_reader);
-
-        let path = std::path::Path::new(UPLOADS_DIRECTORY).join(path);
-        let mut file = BufWriter::new(File::create(path).await?);
-
-        tokio::io::copy(&mut body_reader, &mut file).await?;
-
-        Ok::<_, io::Error>(())
-    }
-    .await
-    .map_err(|err| (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()))
-}
-
-fn path_is_valid(path: &str) -> bool {
-    let path = std::path::Path::new(path);
-    let mut components = path.components().peekable();
-
-    if let Some(first) = components.peek() {
-        if !matches!(first, std::path::Component::Normal(_)) {
-            return false;
-        }
-    }
-
-    components.count() == 1
-}
-
 async fn save_request_body(
-    Path(file_name): Path<String>,
-    request: Request,
+    Path((repo, folder)): Path<(String, String)>,
+    mut multipart: Multipart,
 ) -> Result<(), (StatusCode, String)> {
-    stream_to_file(&file_name, request.into_body().into_data_stream()).await
+    let request_path = std::path::Path::new(&repo);
+    let folder_path = format!("{}/{}", repo.clone(), folder.clone());
+    let upload_path = std::path::Path::new(&folder_path);
+
+    if request_path.exists() && request_path.is_dir() {
+        if upload_path.exists() == false {
+            if let Err(err) = fs::create_dir(&folder_path.clone()) {
+                return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
+            }
+        }
+        while let Some(mut field) = multipart
+            .next_field()
+            .await
+            .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?
+        {
+            let file_name = field.file_name().unwrap().to_string();
+            let mut file = File::create(format!("{}/{}", &folder_path, file_name)).await.unwrap();
+
+            let mut total_bytes = 0;
+            while let Some(chunk) =
+                field.chunk().await.map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?
+            {
+                total_bytes += chunk.len();
+                file.write_all(&chunk).await.unwrap();
+            }
+        }
+    } else {
+        return Err((StatusCode::BAD_REQUEST, "No repository found".to_string()));
+    }
+    Ok(())
 }
