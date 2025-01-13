@@ -93,8 +93,8 @@ async fn save_request_body(
     let upload_path = std::path::Path::new(&folder_path);
 
     if request_path.exists() && request_path.is_dir() {
-        if upload_path.exists() == false {
-            if let Err(err) = fs::create_dir(&folder_path.clone()) {
+        if !upload_path.exists() {
+            if let Err(err) = fs::create_dir(folder_path.clone()) {
                 return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
             }
         }
