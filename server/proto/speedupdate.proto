@@ -38,7 +38,7 @@ message Options {
 message RepositoryStatus {
   string path = 1;
   repeated Platforms platforms = 2;
-  repeated Options options = 3;
+  optional Options options = 3;
 }
 
 message FileToDelete {
