@@ -101,8 +101,9 @@ impl Repo for RemoteRepository {
         let repo_request = inner.path.clone();
         let repo_watch = inner.path.clone();
         let platforms = inner.platforms;
-        let build_path = inner.build_path;
-        let build_path = build_path.unwrap_or(".build".to_string());
+        let options = inner.options;
+        println!("options: {:?}", options);
+        let build_path = ".".to_string(); // = build_path.unwrap_or(".build".to_string());
         let mut subfolders = Vec::new();
 
         let mut package_path = "".to_string();
@@ -525,12 +526,12 @@ fn repo_state(path: String, build_path: String) -> Result<RepoStatus, String> {
             }
             value.iter().map(|p| p.size()).sum::<u64>()
         }
-        Err(error) => return Err("Packages : ".to_owned() + &error.to_string()),
+        Err(error) => return Err("Packages: ".to_owned() + &error.to_string()),
     };
 
     let available_packages = match repo.available_packages(build_path) {
         Ok(pack) => pack,
-        Err(err) => return Err("Available packages : ".to_owned() + &err.to_string()),
+        Err(err) => return Err("Available packages: ".to_owned() + &err.to_string()),
     };
 
     let mut available_binaries = Vec::new();
@@ -546,7 +547,7 @@ fn repo_state(path: String, build_path: String) -> Result<RepoStatus, String> {
                 }
             }
         }
-        Err(err) => return Err("Available binaries".to_owned() + &err.to_string()),
+        Err(err) => return Err("Available binaries: ".to_owned() + &err.to_string()),
     }
 
     let state = RepoStatus {
