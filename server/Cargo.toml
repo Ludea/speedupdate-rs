@@ -25,7 +25,7 @@ tonic = { version = "0.12", features = ["gzip"] }
 tonic-web = "0.12"
 tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
-tokio-stream = { version = "0.1", features = ["net"] }
+tokio-stream = { version = "0.1", features = ["net", "sync"] }
 tokio-util = { version = "0.7", features = ["io"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["tracing-log", "env-filter"] }

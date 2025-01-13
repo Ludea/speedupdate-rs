@@ -102,10 +102,16 @@ impl Repo for RemoteRepository {
         let repo_watch = inner.path.clone();
         let platforms = inner.platforms;
         let build_path = inner.build_path;
-
         let build_path = build_path.unwrap_or(".build".to_string());
-
         let mut subfolders = Vec::new();
+
+        let mut package_path = "".to_string();
+        if build_path != "." {
+            package_path = build_path; //"".to_string();
+        } //else {
+          //package_path = build_path;
+          //}
+        println!("12 : {}", package_path);
 
         for host in platforms.clone() {
             match Platforms::try_from(host) {
@@ -121,7 +127,7 @@ impl Repo for RemoteRepository {
             let mut state = RepoStatusOutput { status: Vec::new() };
             for folder in subfolders.clone() {
                 state.status.push(
-                    match repo_state(repo_request.clone() + "/" + folder, build_path.clone()) {
+                    match repo_state(repo_request.clone() + "/" + folder, package_path.clone()) {
                         Ok(local_state) => local_state,
                         Err(err) => return Err(Status::internal(err)),
                     },
@@ -182,7 +188,7 @@ impl Repo for RemoteRepository {
                 let _watcher = watcher;
                 while let Some(Ok(_)) = local_rx.recv().await {
                     for folder in subfolders.clone() {
-                        match repo_state(repo_watch.clone() + folder, build_path.clone()) {
+                        match repo_state(repo_watch.clone() + folder, package_path.clone()) {
                             Ok(new_state) => {
                                 repo_array.status.push(new_state);
                             }

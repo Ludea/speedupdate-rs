@@ -1,19 +1,30 @@
 use axum::{
-    extract::{MatchedPath, Multipart, Path, Request},
+    extract::{MatchedPath, Multipart, Path, Request, State},
     http::StatusCode,
     middleware::{self, Next},
-    response::IntoResponse,
+    response::{
+        sse::{Event, Sse},
+        IntoResponse,
+    },
     routing::{get, post},
     Router,
 };
+use futures::stream::{self, StreamExt, TryStreamExt};
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use std::{fs, future::ready, net::SocketAddr};
-use tokio::{fs::File, io::AsyncWriteExt};
+use std::{convert::Infallible, fs, future::ready, net::SocketAddr};
+use tokio::{fs::File, io::AsyncWriteExt, sync::broadcast};
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt as _;
 use tower_http::{
     cors::{Any, CorsLayer},
     services::ServeDir,
     trace::TraceLayer,
 };
+
+#[derive(Clone)]
+struct AppState {
+    progress_tx: broadcast::Sender<(String, String)>,
+}
 
 async fn health_check() -> &'static str {
     "OK"
@@ -34,6 +45,9 @@ fn setup_metrics_recorder() -> PrometheusHandle {
 }
 
 pub async fn http_api() {
+    let (progress_tx, _) = broadcast::channel(100);
+    let state = AppState { progress_tx };
+
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     let local_addr = listener.local_addr().unwrap();
@@ -46,10 +60,12 @@ pub async fn http_api() {
         .route("/health", get(health_check))
         .route("/metrics", get(move || ready(recorder_handle.render())))
         .route("/{repo}/{folder}", post(save_request_body))
+        //      .route("/{repo}/progression", get(sse_handler))
         .fallback_service(serve_dir)
         .route_layer(middleware::from_fn(track_metrics))
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
-        .layer(TraceLayer::new_for_http());
+        .layer(TraceLayer::new_for_http())
+        .with_state(state);
 
     axum::serve(listener, app).await.unwrap();
 }
@@ -103,3 +119,22 @@ async fn save_request_body(
     }
     Ok(())
 }
+
+//async fn sse_handler(State(state): State<AppState>) -> impl IntoResponse { //Sse<impl Stream<Item = Result<Event, Infallible>>> {
+//    let rx = state.progress_tx.subscribe();
+
+/*let stream = BroadcastStream::new(rx)
+//stream::repeat_with(|| Event::default().data("hi!"))
+        .map(|result| match result {
+    Ok(progress) => Ok(("12", "13")),
+    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    });
+//        .throttle(Duration::from_secs(1));
+*/
+//  Sse::new(stream).into_response();
+//keep_alive(
+//        axum::response::sse::KeepAlive::new()
+//            .interval(Duration::from_secs(1))
+//            .text("keep-alive-text"),
+//  )
+//}
