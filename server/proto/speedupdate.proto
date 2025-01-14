@@ -33,6 +33,7 @@ message RepositoryPath {
 
 message Options {
   string build_path = 1;
+  string upload_path = 2;
 }
 
 message RepositoryStatus {

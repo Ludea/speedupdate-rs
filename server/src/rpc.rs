@@ -9,7 +9,7 @@ use notify::{Config, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use speedupdaterpc::repo_server::{Repo, RepoServer};
 use speedupdaterpc::{
-    BuildInput, BuildOutput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Package,
+    BuildInput, BuildOutput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Options, Package,
     Platforms, RepoStatus, RepoStatusOutput, RepositoryPath, RepositoryStatus, Version, Versions,
 };
 use std::{
@@ -101,18 +101,13 @@ impl Repo for RemoteRepository {
         let repo_request = inner.path.clone();
         let repo_watch = inner.path.clone();
         let platforms = inner.platforms;
-        let options = inner.options;
-        println!("options: {:?}", options);
-        let build_path = ".".to_string(); // = build_path.unwrap_or(".build".to_string());
-        let mut subfolders = Vec::new();
+        let options = inner
+            .options
+            .unwrap_or(Options { build_path: ".".to_string(), upload_path: ".".to_string() });
 
-        let mut package_path = "".to_string();
-        if build_path != "." {
-            package_path = build_path; //"".to_string();
-        } //else {
-          //package_path = build_path;
-          //}
-        println!("12 : {}", package_path);
+        println!("options: {:?}", options.clone());
+
+        let mut subfolders = Vec::new();
 
         for host in platforms.clone() {
             match Platforms::try_from(host) {
@@ -128,7 +123,7 @@ impl Repo for RemoteRepository {
             let mut state = RepoStatusOutput { status: Vec::new() };
             for folder in subfolders.clone() {
                 state.status.push(
-                    match repo_state(repo_request.clone() + "/" + folder, package_path.clone()) {
+                    match repo_state(repo_request.clone() + "/" + folder, options.clone()) {
                         Ok(local_state) => local_state,
                         Err(err) => return Err(Status::internal(err)),
                     },
@@ -189,7 +184,7 @@ impl Repo for RemoteRepository {
                 let _watcher = watcher;
                 while let Some(Ok(_)) = local_rx.recv().await {
                     for folder in subfolders.clone() {
-                        match repo_state(repo_watch.clone() + folder, package_path.clone()) {
+                        match repo_state(repo_watch.clone() + folder, options.clone()) {
                             Ok(new_state) => {
                                 repo_array.status.push(new_state);
                             }
@@ -496,8 +491,8 @@ impl Repo for RemoteRepository {
     }
 }
 
-fn repo_state(path: String, build_path: String) -> Result<RepoStatus, String> {
-    let repo = Repository::new(PathBuf::from(path));
+fn repo_state(path: String, options: Options) -> Result<RepoStatus, String> {
+    let repo = Repository::new(PathBuf::from(path.clone()));
     let mut list_versions: Vec<Versions> = Vec::new();
     match repo.versions() {
         Ok(value) => {
@@ -529,13 +524,14 @@ fn repo_state(path: String, build_path: String) -> Result<RepoStatus, String> {
         Err(error) => return Err("Packages: ".to_owned() + &error.to_string()),
     };
 
-    let available_packages = match repo.available_packages(build_path) {
+    let available_packages = match repo.available_packages(options.build_path) {
         Ok(pack) => pack,
         Err(err) => return Err("Available packages: ".to_owned() + &err.to_string()),
     };
 
     let mut available_binaries = Vec::new();
-    let binaries_folder = Path::new("uploads");
+    let formated_folder = &format!("{}{}", path, options.upload_path);
+    let binaries_folder = Path::new(formated_folder);
     match fs::read_dir(binaries_folder) {
         Ok(dir) => {
             for entry in dir {
