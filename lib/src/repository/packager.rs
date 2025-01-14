@@ -360,7 +360,7 @@ fn is_exe(_filename: &str, metadata: &fs::Metadata) -> bool {
 
 #[cfg(not(unix))]
 fn is_exe(filename: &str, _metadata: &fs::Metadata) -> bool {
-    return filename.ends_with(".exe");
+    filename.ends_with(".exe")
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
