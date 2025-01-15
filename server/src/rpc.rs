@@ -105,8 +105,6 @@ impl Repo for RemoteRepository {
             .options
             .unwrap_or(Options { build_path: ".".to_string(), upload_path: ".".to_string() });
 
-        println!("options: {:?}", options.clone());
-
         let mut subfolders = Vec::new();
 
         for host in platforms.clone() {
@@ -169,7 +167,7 @@ impl Repo for RemoteRepository {
                         RecursiveMode::NonRecursive,
                     )
                     .unwrap();
-                if Path::new(&(repo_request.clone() + folder + "/.build")).exists() {
+                if Path::new(&(repo_request.clone() + folder + &options.build_path)).exists() {
                     watcher
                         .watch(
                             Path::new(&(repo_request.clone() + folder + "/.build")),
