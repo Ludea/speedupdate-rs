@@ -540,8 +540,8 @@ fn repo_state(path: String, options: Options) -> Result<RepoStatus, String> {
     };
 
     let mut available_binaries = Vec::new();
-    let formated_folder = &format!("{}{}", path, options.upload_path);
-    let binaries_folder = Path::new(formated_folder);
+//    let formated_folder = &format!("{}{}", path, options.upload_path);
+    let binaries_folder = Path::new(&options.upload_path);
     match fs::read_dir(binaries_folder) {
         Ok(dir) => {
             for entry in dir {
