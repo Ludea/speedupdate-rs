@@ -487,6 +487,18 @@ impl Repo for RemoteRepository {
         let reply = Empty {};
         Ok(Response::new(reply))
     }
+
+    async fn delete_repo(
+        &self,
+        request: Request<RepositoryPath>,
+    ) -> Result<Response<Empty>, Status> {
+        let repo = request.into_inner().path;
+        if let Err(err) = fs::remove_dir_all(repo) {
+            return Err(Status::internal(err.to_string()));
+        }
+        let reply = Empty {};
+        Ok(Response::new(reply))
+    }
 }
 
 fn repo_state(path: String, options: Options) -> Result<RepoStatus, String> {
