@@ -685,7 +685,7 @@ where
             .unwrap();
             let decoding_key = &DecodingKey::from_ec_der(pair.public_key().as_ref());
 
-            let content = body.clone().collect().await.unwrap().to_bytes();
+           // let content = body.clone().collect().await.unwrap().to_bytes();
             //let content = content.trim_ascii();
             //tracing::info!("body : {:?}", content);
             /*match parts.headers.get("authorization") {
