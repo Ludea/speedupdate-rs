@@ -493,9 +493,10 @@ impl Repo for RemoteRepository {
         request: Request<RepositoryPath>,
     ) -> Result<Response<Empty>, Status> {
         let repo = request.into_inner().path;
-        if let Err(err) = fs::remove_dir_all(repo) {
+        if let Err(err) = fs::remove_dir_all(repo.clone()) {
             return Err(Status::internal(err.to_string()));
         }
+        tracing::info!("{} repository deleted", repo);
         let reply = Empty {};
         Ok(Response::new(reply))
     }
@@ -540,7 +541,6 @@ fn repo_state(path: String, options: Options) -> Result<RepoStatus, String> {
     };
 
     let mut available_binaries = Vec::new();
-//    let formated_folder = &format!("{}{}", path, options.upload_path);
     let binaries_folder = Path::new(&options.upload_path);
     match fs::read_dir(binaries_folder) {
         Ok(dir) => {
@@ -651,13 +651,11 @@ pub struct AuthMiddleware<S> {
 
 type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
-impl<S> Service<hyper::Request<BoxBody>> for AuthMiddleware<S>
+impl<S, ReqBody, ResBody> Service<http::Request<ReqBody>> for AuthMiddleware<S>
 where
-    S: Service<hyper::Request<BoxBody>, Response = hyper::Response<BoxBody>>
-        + Clone
-        + Send
-        + 'static,
+    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
+    ReqBody: Send + 'static + BodyExt + Clone,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -667,12 +665,15 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: hyper::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future
+   // where
+     //   <ReqBody as axum::body::HttpBody>::Error: std::fmt::Debug //, <ReqBody as axum::body::HttpBody>::Data: std::marker::Send
+    {
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
         Box::pin(async move {
-            let (parts, body) = req.into_parts();
+            let (mut parts, body) = req.into_parts();
             let encoded_pkcs8 = fs::read_to_string("pkey").unwrap();
             let decoded_pkcs8 = general_purpose::STANDARD.decode(encoded_pkcs8).unwrap();
             let rng = &rand::SystemRandom::new();
@@ -684,39 +685,38 @@ where
             .unwrap();
             let decoding_key = &DecodingKey::from_ec_der(pair.public_key().as_ref());
 
-            let content = body.collect().await.unwrap().to_bytes().clone();
-            //	    let content_without_ascii = content.trim_ascii();
-            //            tracing::info!("body : {:?}", content_without_ascii);
-            /* match parts.headers.get("authorization") {
-                     Some(t) => {
-                         let validation = &mut Validation::new(Algorithm::ES256);
-                         validation.validate_exp = false;
-                         let t_string = t.to_str().unwrap().replace("Bearer ", "");
-                         match decode::<Claims>(&t_string, decoding_key, validation) {
-                             Ok(token_data) => {
-                 // Compare body with scope
-                                 if token_data.claims.scope == "" {
-                                    println!("12 : {:?}", token_data);
-            //                         let body = BoxBody::new(
-              //                           Full::new(content)
-                //                             .map_err(|err| Status::internal(err.to_string())),
-                  //                   );
-                    //                 let response =
-                      //                   inner.call(hyper::Request::from_parts(parts, body)).await?;
-                        //             return Ok(response);
-                                 } else {
-                                     return Err(Status::unauthenticated("Not allowed"));
-                                 }
-                             }
-                             Err(err) => return Err(Status::unauthenticated(err.to_string())),
-                         }
-                     }
-                     None => return Err(Status::unauthenticated("No token found")),
-                 }*/
+            let content = body.clone().collect().await.unwrap().to_bytes();
+            //let content = content.trim_ascii();
+            //tracing::info!("body : {:?}", content);
+            /*match parts.headers.get("authorization") {
+                Some(t) => {
+                    let validation = &mut Validation::new(Algorithm::ES256);
+                    validation.validate_exp = false;
+                    let t_string = t.to_str().unwrap().replace("Bearer ", "");
+                    match decode::<Claims>(&t_string, decoding_key, validation) {
+                        Ok(token_data) => {
+                            // Compare body with scope
+                            if token_data.claims.scope == "" {
+                                println!("12 : {:?}", token_data);
+                                let body = BoxBody::new(
+                                         Full::new(content)
+                                             .map_err(|err| Status::internal(err.to_string())),
+                                     );
+                                     let response =
+                                         inner.call(http::Request::from_parts(parts, body)).await?;
+                                     return Ok(response);
 
-            let body =
-                BoxBody::new(Full::new(content).map_err(|err| Status::internal(err.to_string())));
-            let response = inner.call(hyper::Request::from_parts(parts, body)).await?;
+                            } else {
+                                return Err(Status::unauthenticated("Not allowed"));
+                            }
+                        }
+                        Err(err) => return Err(Status::unauthenticated(err.to_string())),
+                    }
+                }
+                None => return Err(Status::unauthenticated("No token found")),
+            }*/
+
+            let response = inner.call(http::Request::from_parts(parts, body)).await?;
             Ok(response)
         })
     }
