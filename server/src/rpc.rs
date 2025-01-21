@@ -614,10 +614,7 @@ pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
 
     let cors_layer = CorsLayer::new().allow_origin(origins).allow_headers(Any).expose_headers(Any);
 
-    let layer = tower::ServiceBuilder::new()
-        .timeout(Duration::from_secs(30))
-        .layer(AuthMiddlewareLayer::default())
-        .into_inner();
+    let layer = tower::ServiceBuilder::new().layer(AuthMiddlewareLayer::default()).into_inner();
 
     tracing::info!("Speedupdate gRPC server listening on {addr}");
 
@@ -653,9 +650,12 @@ type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>
 
 impl<S, ReqBody, ResBody> Service<http::Request<ReqBody>> for AuthMiddleware<S>
 where
-    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>> + Clone + Send + 'static,
+    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>, Error = Status>
+        + Clone
+        + Send
+        + 'static,
     S::Future: Send + 'static,
-    ReqBody: Send + 'static + BodyExt + Clone,
+    ReqBody: Send + 'static + BodyExt,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -666,8 +666,9 @@ where
     }
 
     fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future
-   // where
-     //   <ReqBody as axum::body::HttpBody>::Error: std::fmt::Debug //, <ReqBody as axum::body::HttpBody>::Data: std::marker::Send
+//where
+      //  <ReqBody as BoxBody>::Error: std::fmt::Debug,
+        //<ReqBody as axum::body::HttpBody>::Data: Send,
     {
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
@@ -685,10 +686,10 @@ where
             .unwrap();
             let decoding_key = &DecodingKey::from_ec_der(pair.public_key().as_ref());
 
-           // let content = body.clone().collect().await.unwrap().to_bytes();
+            //    let content = body.collect().await.unwrap().to_bytes();
             //let content = content.trim_ascii();
             //tracing::info!("body : {:?}", content);
-            /*match parts.headers.get("authorization") {
+            match parts.headers.get("authorization") {
                 Some(t) => {
                     let validation = &mut Validation::new(Algorithm::ES256);
                     validation.validate_exp = false;
@@ -698,23 +699,22 @@ where
                             // Compare body with scope
                             if token_data.claims.scope == "" {
                                 println!("12 : {:?}", token_data);
-                                let body = BoxBody::new(
-                                         Full::new(content)
-                                             .map_err(|err| Status::internal(err.to_string())),
-                                     );
-                                     let response =
-                                         inner.call(http::Request::from_parts(parts, body)).await?;
-                                     return Ok(response);
-
+                                //      let body = BoxBody::new(
+                                //             Full::new(content)
+                                //               .map_err(|err| Status::internal(err.to_string())),
+                                //     );
+                                let response =
+                                    inner.call(http::Request::from_parts(parts, body)).await?;
+                                return Ok(response);
                             } else {
-                                return Err(Status::unauthenticated("Not allowed"));
+                                //return Err(Status::unauthenticated("Not allowed"));
                             }
                         }
-                        Err(err) => return Err(Status::unauthenticated(err.to_string())),
+                        Err(err) => {} //return Err(Status::unauthenticated(err.to_string())),
                     }
                 }
                 None => return Err(Status::unauthenticated("No token found")),
-            }*/
+            }
 
             let response = inner.call(http::Request::from_parts(parts, body)).await?;
             Ok(response)
