@@ -541,7 +541,8 @@ fn repo_state(path: String, options: Options) -> Result<RepoStatus, String> {
     };
 
     let mut available_binaries = Vec::new();
-    let binaries_folder = Path::new(&options.upload_path);
+    let temp_binaries_folder = format!("{}/{}", path, &options.upload_path);
+    let binaries_folder = Path::new(&temp_binaries_folder);
     match fs::read_dir(binaries_folder) {
         Ok(dir) => {
             for entry in dir {
@@ -650,10 +651,7 @@ type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>
 
 impl<S, ReqBody, ResBody> Service<http::Request<ReqBody>> for AuthMiddleware<S>
 where
-    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>, Error = Status>
-        + Clone
-        + Send
-        + 'static,
+    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     ReqBody: Send + 'static + BodyExt,
 {
@@ -713,7 +711,7 @@ where
                         Err(err) => {} //return Err(Status::unauthenticated(err.to_string())),
                     }
                 }
-                None => return Err(Status::unauthenticated("No token found")),
+                None => {} //return Err(Status::unauthenticated("No token found")),
             }
 
             let response = inner.call(http::Request::from_parts(parts, body)).await?;
