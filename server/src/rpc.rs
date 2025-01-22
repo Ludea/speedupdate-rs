@@ -274,11 +274,14 @@ impl Repo for RemoteRepository {
     ) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
-        let repo = Repository::new(PathBuf::from(repository_path));
+        let repo = Repository::new(PathBuf::from(repository_path.clone()));
         let version_string = CleanName::new(inner.version).unwrap();
         let reply = Empty {};
         match repo.unregister_version(&version_string) {
-            Ok(_) => Ok(Response::new(reply)),
+            Ok(_) => {
+                tracing::info!("version {} deleted for {}", version_string, repository_path);
+                return Ok(Response::new(reply))
+            }
             Err(err) => Err(Status::internal(err.to_string())),
         }
     }
