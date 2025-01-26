@@ -289,8 +289,9 @@ impl Repo for RemoteRepository {
 
     async fn register_package(&self, request: Request<Package>) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
+        let package_name = inner.name;
         let repository_path = inner.path;
-        let package = ".build/".to_owned() + &inner.name + ".metadata";
+        let package = package_name + ".metadata";
         let repo = Repository::new(PathBuf::from(repository_path));
         let reply = Empty {};
         match repo.register_package(package.as_str()) {
@@ -304,8 +305,9 @@ impl Repo for RemoteRepository {
         request: Request<Package>,
     ) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
+        let package_name = inner.name;
         let repository_path = inner.path;
-        let package = ".build/".to_owned() + &inner.name + ".metadata";
+        let package = package_name + ".metadata";
         let repo = Repository::new(PathBuf::from(repository_path));
         let reply = Empty {};
         match repo.unregister_package(package.as_str()) {
