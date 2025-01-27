@@ -245,11 +245,11 @@ impl Repo for RemoteRepository {
     async fn register_version(&self, request: Request<Version>) -> Result<Response<Empty>, Status> {
         let inner = request.into_inner();
         let repository_path = inner.path;
-
         let repo = Repository::new(PathBuf::from(repository_path.clone()));
         let version_string = match CleanName::new(inner.version) {
             Ok(ver) => ver,
             Err(err) => {
+                tracing::error!(err);
                 return Err(Status::internal(err.to_string()));
             }
         };
@@ -284,7 +284,10 @@ impl Repo for RemoteRepository {
                 tracing::info!("version {} deleted for {}", version_string, repository_path);
                 return Ok(Response::new(reply));
             }
-            Err(err) => Err(Status::internal(err.to_string())),
+            Err(err) => {
+                tracing::error!("{}", err);
+                Err(Status::internal(err.to_string()))
+            }
         }
     }
 
