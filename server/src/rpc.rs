@@ -22,6 +22,7 @@ use std::{
 };
 
 use base64::{engine::general_purpose, Engine as _};
+use http::header::{AUTHORIZATION, CONTENT_TYPE};
 use http_body_util::BodyExt;
 use http_body_util::Full;
 use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
@@ -619,7 +620,15 @@ pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
         "https://web.marlin-atlas.ts.net".parse().unwrap(),
     ];
 
-    let cors_layer = CorsLayer::new().allow_origin(origins).allow_headers(Any).expose_headers(Any);
+    let cors_layer = CorsLayer::new()
+        .allow_origin(origins)
+        .allow_headers([
+            AUTHORIZATION,
+            CONTENT_TYPE,
+            http::header::HeaderName::from_static("x-grpc-web"),
+            http::header::HeaderName::from_static("x-user-agent"),
+        ])
+        .expose_headers(Any);
 
     let layer = tower::ServiceBuilder::new().layer(AuthMiddlewareLayer::default()).into_inner();
 
@@ -700,7 +709,7 @@ where
                 .replace("/macos_x86_64", "")
                 .replace("/linux", "");
 
-            println!("content : {:?}", content_without_path);
+            // println!("content : {:?}", content_without_path);
 
             match parts.headers.get("authorization") {
                 Some(t) => {
