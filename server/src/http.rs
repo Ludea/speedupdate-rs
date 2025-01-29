@@ -1,5 +1,5 @@
 use axum::{
-    extract::{MatchedPath, Multipart, Path, Request, State},
+    extract::{MatchedPath, Multipart, Path, Request},
     http::StatusCode,
     middleware::{self, Next},
     response::{
@@ -9,10 +9,15 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use futures::stream::{self, StreamExt, TryStreamExt};
+use futures::stream::Stream;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
+use serde_json::json;
 use std::{convert::Infallible, fs, future::ready, net::SocketAddr};
-use tokio::{fs::File, io::AsyncWriteExt, sync::broadcast};
+use tokio::{
+    fs::File,
+    io::AsyncWriteExt,
+    sync::broadcast::{self, Sender},
+};
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt as _;
 use tower_http::{
@@ -20,11 +25,6 @@ use tower_http::{
     services::ServeDir,
     trace::TraceLayer,
 };
-
-#[derive(Clone)]
-struct AppState {
-    progress_tx: broadcast::Sender<(String, String)>,
-}
 
 async fn health_check() -> &'static str {
     "OK"
@@ -46,7 +46,6 @@ fn setup_metrics_recorder() -> PrometheusHandle {
 
 pub async fn http_api() {
     let (progress_tx, _) = broadcast::channel(100);
-    let state = AppState { progress_tx };
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -59,13 +58,18 @@ pub async fn http_api() {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/metrics", get(move || ready(recorder_handle.render())))
-        .route("/{repo}/{folder}", post(save_request_body))
-        //      .route("/{repo}/progression", get(sse_handler))
+        .route(
+            "/{repo}/{folder}",
+            post({
+                let progress_tx = progress_tx.clone();
+                move |path, multipart| save_request_body(progress_tx.clone(), path, multipart)
+            }),
+        )
+        .route("/{repo}/progression", get(move || sse_handler(progress_tx)))
         .fallback_service(serve_dir)
         .route_layer(middleware::from_fn(track_metrics))
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
-        .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .layer(TraceLayer::new_for_http());
 
     axum::serve(listener, app).await.unwrap();
 }
@@ -85,6 +89,7 @@ async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
 }
 
 async fn save_request_body(
+    progress_tx: Sender<(usize, usize)>,
     Path((repo, folder)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<(), (StatusCode, String)> {
@@ -105,12 +110,14 @@ async fn save_request_body(
         {
             let file_name = field.file_name().unwrap().to_string();
             let mut file = File::create(format!("{}/{}", &folder_path, file_name)).await.unwrap();
-
             let mut total_bytes = 0;
             while let Some(chunk) =
                 field.chunk().await.map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?
             {
                 total_bytes += chunk.len();
+                if let Err(err) = progress_tx.send((chunk.len(), total_bytes)) {
+                    return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
+                }
                 file.write_all(&chunk).await.unwrap();
             }
         }
@@ -120,21 +127,22 @@ async fn save_request_body(
     Ok(())
 }
 
-//async fn sse_handler(State(state): State<AppState>) -> impl IntoResponse { //Sse<impl Stream<Item = Result<Event, Infallible>>> {
-//    let rx = state.progress_tx.subscribe();
+async fn sse_handler(
+    progress_tx: Sender<(usize, usize)>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let rx = progress_tx.subscribe();
 
-/*let stream = BroadcastStream::new(rx)
-//stream::repeat_with(|| Event::default().data("hi!"))
-        .map(|result| match result {
-    Ok(progress) => Ok(("12", "13")),
-    Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    let stream = BroadcastStream::new(rx).filter_map(|result| match result {
+        Ok(bytes) => {
+let mut percent: usize = 0;
+percent = bytes.0 *100 / bytes.1;
+println!("{:?}", percent);
+            let bytes_json = json!({ "bytes": bytes.0, "total_bytes": bytes.1
+            });
+            Some(Ok(Event::default().data(bytes_json.to_string())))
+        }
+        Err(_) => None,
     });
-//        .throttle(Duration::from_secs(1));
-*/
-//  Sse::new(stream).into_response();
-//keep_alive(
-//        axum::response::sse::KeepAlive::new()
-//            .interval(Duration::from_secs(1))
-//            .text("keep-alive-text"),
-//  )
-//}
+
+    Sse::new(stream)
+}

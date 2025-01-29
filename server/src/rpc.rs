@@ -1,4 +1,3 @@
-use futures::future::ready;
 use futures::prelude::*;
 use libspeedupdate::{
     metadata::{v1, CleanName},
@@ -25,7 +24,7 @@ use base64::{engine::general_purpose, Engine as _};
 use http::header::{AUTHORIZATION, CONTENT_TYPE};
 use http_body_util::BodyExt;
 use http_body_util::Full;
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use ring::{
     rand,
     signature::{EcdsaKeyPair, KeyPair},
@@ -688,7 +687,7 @@ where
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
         Box::pin(async move {
-            let (mut parts, body) = req.into_parts();
+            let (parts, body) = req.into_parts();
             let encoded_pkcs8 = fs::read_to_string("pkey").unwrap();
             let decoded_pkcs8 = general_purpose::STANDARD.decode(encoded_pkcs8).unwrap();
             let rng = &rand::SystemRandom::new();
