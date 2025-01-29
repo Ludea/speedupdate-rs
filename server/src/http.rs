@@ -1,6 +1,6 @@
 use axum::{
     extract::{MatchedPath, Multipart, Path, Request},
-    http::StatusCode,
+    http::{header::CONTENT_LENGTH, HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{
         sse::{Event, Sse},
@@ -11,7 +11,6 @@ use axum::{
 };
 use futures::stream::Stream;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use serde_json::json;
 use std::{convert::Infallible, fs, future::ready, net::SocketAddr};
 use tokio::{
     fs::File,
@@ -62,7 +61,9 @@ pub async fn http_api() {
             "/{repo}/{folder}",
             post({
                 let progress_tx = progress_tx.clone();
-                move |path, multipart| save_request_body(progress_tx.clone(), path, multipart)
+                move |header, path, multipart| {
+                    save_request_body(progress_tx.clone(), header, path, multipart)
+                }
             }),
         )
         .route("/{repo}/progression", get(move || sse_handler(progress_tx)))
@@ -90,12 +91,16 @@ async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
 
 async fn save_request_body(
     progress_tx: Sender<(usize, usize)>,
+    header: HeaderMap,
     Path((repo, folder)): Path<(String, String)>,
     mut multipart: Multipart,
 ) -> Result<(), (StatusCode, String)> {
     let request_path = std::path::Path::new(&repo);
     let folder_path = format!("{}/{}", repo.clone(), folder.clone());
     let upload_path = std::path::Path::new(&folder_path);
+
+    let content_length = header.get(CONTENT_LENGTH).unwrap().to_str().unwrap();
+    let total_size = content_length.parse::<usize>().unwrap();
 
     if request_path.exists() && request_path.is_dir() {
         if !upload_path.exists() {
@@ -110,16 +115,20 @@ async fn save_request_body(
         {
             let file_name = field.file_name().unwrap().to_string();
             let mut file = File::create(format!("{}/{}", &folder_path, file_name)).await.unwrap();
-            let mut total_bytes = 0;
+            let mut progression = 0;
             while let Some(chunk) =
                 field.chunk().await.map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?
             {
-                total_bytes += chunk.len();
-                if let Err(err) = progress_tx.send((chunk.len(), total_bytes)) {
+                progression += chunk.len();
+                if let Err(err) = progress_tx.send((progression, total_size)) {
                     return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
                 }
                 file.write_all(&chunk).await.unwrap();
             }
+            if let Err(err) = progress_tx.send((total_size, total_size)) {
+                return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
+            }
+            tracing::info!("File {} succesfully uploaded for {} repository", file_name, repo);
         }
     } else {
         return Err((StatusCode::BAD_REQUEST, "No repository found".to_string()));
@@ -131,15 +140,10 @@ async fn sse_handler(
     progress_tx: Sender<(usize, usize)>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let rx = progress_tx.subscribe();
-
-    let stream = BroadcastStream::new(rx).filter_map(|result| match result {
+    let stream = BroadcastStream::new(rx).filter_map(move |result| match result {
         Ok(bytes) => {
-let mut percent: usize = 0;
-percent = bytes.0 *100 / bytes.1;
-println!("{:?}", percent);
-            let bytes_json = json!({ "bytes": bytes.0, "total_bytes": bytes.1
-            });
-            Some(Ok(Event::default().data(bytes_json.to_string())))
+            let percent = bytes.0 * 100 / bytes.1;
+            Some(Ok(Event::default().data(percent.to_string())))
         }
         Err(_) => None,
     });
