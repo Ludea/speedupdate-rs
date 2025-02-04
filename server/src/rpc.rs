@@ -178,6 +178,7 @@ impl Repo for RemoteRepository {
                 }
             }
             let mut repo_array = RepoStatusOutput { status: Vec::new() };
+            println!("client disconnect");
 
             tokio::task::spawn(async move {
                 let _watcher = watcher;
@@ -191,6 +192,7 @@ impl Repo for RemoteRepository {
                         };
                     }
                     send_message(tx.clone(), repo_array.clone());
+                    repo_array.status.clear();
                 }
             });
 
