@@ -611,7 +611,7 @@ where
 }
 
 pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "0.0.0.0:3001".parse().unwrap();
+    let addr = "0.0.0.0:3000".parse().unwrap();
 
     let repo = RemoteRepository {};
     let service = RepoServer::new(repo)
