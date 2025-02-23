@@ -58,7 +58,7 @@ pub async fn http_api() {
         .route("/health", get(health_check))
         .route("/metrics", get(move || ready(recorder_handle.render())))
         .route(
-            "/{repo}/{folder}",
+            "/{repo}/{folder}/{platform}",
             post({
                 let progress_tx = progress_tx.clone();
                 move |header, path, multipart| {
@@ -92,11 +92,11 @@ async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
 async fn save_request_body(
     progress_tx: Sender<(usize, usize)>,
     header: HeaderMap,
-    Path((repo, folder)): Path<(String, String)>,
+    Path((repo, folder, platform)): Path<(String, String, String)>,
     mut multipart: Multipart,
 ) -> Result<(), (StatusCode, String)> {
     let request_path = std::path::Path::new(&repo);
-    let folder_path = format!("{}/{}", repo.clone(), folder.clone());
+    let folder_path = format!("{}/{}/{}", repo.clone(), folder.clone(), platform);
     let upload_path = std::path::Path::new(&folder_path);
 
     let content_length = header.get(CONTENT_LENGTH).unwrap().to_str().unwrap();
