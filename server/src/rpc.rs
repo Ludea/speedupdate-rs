@@ -178,7 +178,7 @@ impl Repo for RemoteRepository {
                 }
             }
             let mut repo_array = RepoStatusOutput { status: Vec::new() };
-            println!("client disconnect");
+            //println!("client disconnect");
 
             tokio::task::spawn(async move {
                 let _watcher = watcher;
@@ -232,14 +232,24 @@ impl Repo for RemoteRepository {
         let inner = request.into_inner();
 
         let repository_path = inner.path;
-        let mut repo = Repository::new(PathBuf::from(repository_path));
+        let mut repo = Repository::new(PathBuf::from(repository_path.clone()));
 
         let version_string = CleanName::new(inner.version).unwrap();
 
         let reply = Empty {};
         match repo.set_current_version(&version_string) {
-            Ok(_) => Ok(Response::new(reply)),
-            Err(err) => Err(Status::internal(err.to_string())),
+            Ok(_) => {
+                tracing::info!(
+                    "{} is now the current version for {}",
+                    version_string,
+                    repository_path
+                );
+                return Ok(Response::new(reply));
+            }
+            Err(err) => {
+                tracing::error!("{}", err);
+                return Err(Status::internal(err.to_string()));
+            }
         }
     }
 
