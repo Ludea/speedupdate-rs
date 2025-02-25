@@ -11,6 +11,7 @@ use axum::{
 };
 use futures::stream::Stream;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
+use std::io::{self, Read};
 use std::{convert::Infallible, fs, future::ready, net::SocketAddr};
 use tokio::{
     fs::File,
@@ -129,6 +130,22 @@ async fn save_request_body(
                 return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
             }
             tracing::info!("File {} succesfully uploaded for {} repository", file_name, repo);
+
+            match is_zip_file(std::path::Path::new(&format!("{}/{}", &folder_path, file_name))) {
+                Ok(result) => {
+                    if result {
+                        extract_zip(format!("{}/{}", &folder_path, file_name));
+                        if let Err(err) = fs::remove_file(format!("{}/{}", &folder_path, file_name))
+                        {
+                            return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
+                        }
+                    }
+                }
+                Err(err) => {
+                    tracing::error!("{}", err);
+                    return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
+                }
+            };
         }
     } else {
         return Err((StatusCode::BAD_REQUEST, "No repository found".to_string()));
@@ -149,4 +166,55 @@ async fn sse_handler(
     });
 
     Sse::new(stream)
+}
+
+fn is_zip_file(file_path: &std::path::Path) -> io::Result<bool> {
+    let mut file = std::fs::File::open(file_path)?;
+    let mut signature = [0; 4];
+    file.read_exact(&mut signature)?;
+    Ok(signature == [0x50, 0x4B, 0x03, 0x04])
+}
+fn extract_zip(file_name: String) {
+    let file = fs::File::open(file_name).unwrap();
+
+    let mut archive = zip::ZipArchive::new(file).unwrap();
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).unwrap();
+        let outpath = match file.enclosed_name() {
+            Some(path) => path,
+            None => continue,
+        };
+
+        {
+            let comment = file.comment();
+            if !comment.is_empty() {
+                println!("File {i} comment: {comment}");
+            }
+        }
+
+        if file.is_dir() {
+            println!("File {} extracted to \"{}\"", i, outpath.display());
+            fs::create_dir_all(&outpath).unwrap();
+        } else {
+            println!("File {} extracted to \"{}\" ({} bytes)", i, outpath.display(), file.size());
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                    fs::create_dir_all(p).unwrap();
+                }
+            }
+            let mut outfile = fs::File::create(&outpath).unwrap();
+            io::copy(&mut file, &mut outfile).unwrap();
+        }
+
+        // Get and Set permissions
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            if let Some(mode) = file.unix_mode() {
+                fs::set_permissions(&outpath, fs::Permissions::from_mode(mode)).unwrap();
+            }
+        }
+    }
 }
