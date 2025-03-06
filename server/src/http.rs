@@ -47,7 +47,7 @@ fn setup_metrics_recorder() -> PrometheusHandle {
 pub async fn http_api() {
     let (progress_tx, _) = broadcast::channel(100);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     let local_addr = listener.local_addr().unwrap();
     tracing::info!("HTTP listening on {local_addr}");
@@ -63,13 +63,22 @@ pub async fn http_api() {
             post({
                 let progress_tx = progress_tx.clone();
                 move |header, path, multipart| {
-                    save_request_body(progress_tx.clone(), header, path, multipart)
+                    save_binaries(progress_tx.clone(), header, path, multipart)
+                }
+            }),
+        )
+        .route(
+            "/{repo}",
+            post({
+                let progress_tx = progress_tx.clone();
+                move |header, path, multipart| {
+                    save_image(progress_tx.clone(), header, path, multipart)
                 }
             }),
         )
         .route("/{repo}/progression", get(move || sse_handler(progress_tx)))
-        .fallback_service(serve_dir)
         .route_layer(middleware::from_fn(track_metrics))
+        .fallback_service(serve_dir)
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
         .layer(TraceLayer::new_for_http());
 
@@ -90,24 +99,48 @@ async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
     response
 }
 
-async fn save_request_body(
+async fn save_binaries(
     progress_tx: Sender<(usize, usize)>,
     header: HeaderMap,
     Path((repo, folder, platform)): Path<(String, String, String)>,
     mut multipart: Multipart,
 ) -> Result<(), (StatusCode, String)> {
-    let request_path = std::path::Path::new(&repo);
+    let repo_path = std::path::Path::new(&repo);
     let folder_path = format!("{}/{}/{}", repo.clone(), folder.clone(), platform);
     let upload_path = std::path::Path::new(&folder_path);
 
+    upload(progress_tx, multipart, header, repo_path, upload_path).await?;
+
+    Ok(())
+}
+
+async fn save_image(
+    progress_tx: Sender<(usize, usize)>,
+    header: HeaderMap,
+    Path(repo): Path<String>,
+    multipart: Multipart,
+) -> Result<(), (StatusCode, String)> {
+    let repo_path = std::path::Path::new(&repo);
+    let upload_path = std::path::Path::new(&repo);
+
+    upload(progress_tx, multipart, header, repo_path, upload_path).await?;
+
+    Ok(())
+}
+
+async fn upload(
+    progress_tx: Sender<(usize, usize)>,
+    mut multipart: Multipart,
+    header: HeaderMap,
+    repo: &std::path::Path,
+    upload_path: &std::path::Path,
+) -> Result<(), (StatusCode, String)> {
     let content_length = header.get(CONTENT_LENGTH).unwrap().to_str().unwrap();
     let total_size = content_length.parse::<usize>().unwrap();
 
-    if request_path.exists() && request_path.is_dir() {
-        if !upload_path.exists() {
-            if let Err(err) = fs::create_dir_all(folder_path.clone()) {
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
-            }
+    if repo.exists() && repo.is_dir() {
+        if let Err(err) = fs::create_dir_all(upload_path.display().to_string()) {
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
         }
         while let Some(mut field) = multipart
             .next_field()
@@ -115,27 +148,35 @@ async fn save_request_body(
             .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?
         {
             let file_name = field.file_name().unwrap().to_string();
-            let mut file = File::create(format!("{}/{}", &folder_path, file_name)).await.unwrap();
+            let mut file =
+                File::create(format!("{}/{}", &upload_path.display().to_string(), file_name))
+                    .await
+                    .unwrap();
             let mut progression = 0;
             while let Some(chunk) =
                 field.chunk().await.map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?
             {
                 progression += chunk.len();
-                if let Err(err) = progress_tx.send((progression, total_size)) {
-                    return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
-                }
+                let _ = progress_tx.send((progression, total_size));
                 file.write_all(&chunk).await.unwrap();
             }
-            if let Err(err) = progress_tx.send((total_size, total_size)) {
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
-            }
-            tracing::info!("File {} succesfully uploaded for {} repository", file_name, repo);
+            let _ = progress_tx.send((total_size, total_size));
 
-            match is_zip_file(std::path::Path::new(&format!("{}/{}", &folder_path, file_name))) {
+            tracing::info!(
+                "File {} succesfully uploaded to {} folder",
+                file_name,
+                upload_path.display().to_string()
+            );
+            match is_zip_file(std::path::Path::new(&format!(
+                "{}/{}",
+                &upload_path.display(),
+                file_name
+            ))) {
                 Ok(result) => {
                     if result {
-                        extract_zip(format!("{}/{}", &folder_path, file_name));
-                        if let Err(err) = fs::remove_file(format!("{}/{}", &folder_path, file_name))
+                        extract_zip(format!("{}/{}", &upload_path.display(), file_name));
+                        if let Err(err) =
+                            fs::remove_file(format!("{}/{}", &upload_path.display(), file_name))
                         {
                             return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
                         }
