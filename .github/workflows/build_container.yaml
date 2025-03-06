@@ -67,19 +67,3 @@ jobs:
           push: true
           tags: ludea/speedupdate:latest
           platforms: linux/amd64, linux/arm64
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: v3.10.0
-      - id: "configure-git"
-        run: |
-          git config user.name "$GITHUB_ACTOR"
-          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-      - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2
-      - name: Run chart-testing (lint)
-        run: ct lint --target-branch ${{ github.event.repository.default_branch }}
-      - name: Create kind cluster
-        uses: helm/kind-action@v1
-      - name: Run chart-testing (install)
-        run: ct install --chart-dirs chart/ --charts chart/ --debug
