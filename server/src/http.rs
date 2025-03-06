@@ -1,5 +1,5 @@
 use axum::{
-    extract::{MatchedPath, Multipart, Path, Request},
+    extract::{DefaultBodyLimit, MatchedPath, Multipart, Path, Request},
     http::{header::CONTENT_LENGTH, HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{
@@ -77,6 +77,7 @@ pub async fn http_api() {
             }),
         )
         .route("/{repo}/progression", get(move || sse_handler(progress_tx)))
+        .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn(track_metrics))
         .fallback_service(serve_dir)
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
