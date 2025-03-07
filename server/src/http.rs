@@ -104,7 +104,7 @@ async fn save_binaries(
     progress_tx: Sender<(usize, usize)>,
     header: HeaderMap,
     Path((repo, folder, platform)): Path<(String, String, String)>,
-    mut multipart: Multipart,
+    multipart: Multipart,
 ) -> Result<(), (StatusCode, String)> {
     let repo_path = std::path::Path::new(&repo);
     let folder_path = format!("{}/{}/{}", repo.clone(), folder.clone(), platform);
@@ -220,13 +220,13 @@ fn is_zip_file(file_path: &std::path::Path) -> io::Result<bool> {
 }
 
 fn extract_zip(file_name: String) {
-    let file = fs::File::open(file_name).unwrap();
+    let file = fs::File::open(&file_name).unwrap();
 
     let mut archive = zip::ZipArchive::new(file).unwrap();
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).unwrap();
-        let outpath = match file.enclosed_name() {
+        let file_enclosed_name = match file.enclosed_name() {
             Some(path) => path,
             None => continue,
         };
@@ -238,27 +238,36 @@ fn extract_zip(file_name: String) {
             }
         }
 
-        if file.is_dir() {
-            tracing::info!("File {} extracted to \"{}\"", i, outpath.display());
-            fs::create_dir_all(&outpath).unwrap();
-        } else {
-            tracing::info!("File {} extracted to \"{}\" ({} bytes)", i, outpath.display(), file.size());
-            if let Some(p) = outpath.parent() {
-                if !p.exists() {
-                    fs::create_dir_all(p).unwrap();
+        let fullpath = std::path::Path::new(&file_name);
+        if let Some(path_without_zip) = fullpath.parent() {
+            let outpath = path_without_zip.join(file_enclosed_name);
+            if file.is_dir() {
+                tracing::info!("File {} extracted to \"{}\"", i, outpath.display());
+                fs::create_dir_all(&outpath).unwrap();
+            } else {
+                tracing::info!(
+                    "File {} extracted to \"{}\" ({} bytes)",
+                    i,
+                    outpath.display(),
+                    file.size()
+                );
+                if let Some(p) = outpath.parent() {
+                    if !p.exists() {
+                        fs::create_dir_all(p).unwrap();
+                    }
                 }
+                let mut outfile = fs::File::create(&outpath).unwrap();
+                io::copy(&mut file, &mut outfile).unwrap();
             }
-            let mut outfile = fs::File::create(&outpath).unwrap();
-            io::copy(&mut file, &mut outfile).unwrap();
-        }
 
-        // Get and Set permissions
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
+            // Get and Set permissions
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
 
-            if let Some(mode) = file.unix_mode() {
-                fs::set_permissions(&outpath, fs::Permissions::from_mode(mode)).unwrap();
+                if let Some(mode) = file.unix_mode() {
+                    fs::set_permissions(&outpath, fs::Permissions::from_mode(mode)).unwrap();
+                }
             }
         }
     }
