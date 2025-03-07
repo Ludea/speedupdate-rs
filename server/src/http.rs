@@ -138,6 +138,7 @@ async fn upload(
 ) -> Result<(), (StatusCode, String)> {
     let content_length = header.get(CONTENT_LENGTH).unwrap().to_str().unwrap();
     let total_size = content_length.parse::<usize>().unwrap();
+    let mut file_name = String::new();
 
     if repo.exists() && repo.is_dir() {
         if let Err(err) = fs::create_dir_all(upload_path.display().to_string()) {
@@ -148,7 +149,7 @@ async fn upload(
             .await
             .map_err(|err| (StatusCode::BAD_REQUEST, err.to_string()))?
         {
-            let file_name = field.file_name().unwrap().to_string();
+            file_name = field.file_name().unwrap().to_string();
             let mut file =
                 File::create(format!("{}/{}", &upload_path.display().to_string(), file_name))
                     .await
@@ -162,33 +163,34 @@ async fn upload(
                 file.write_all(&chunk).await.unwrap();
             }
             let _ = progress_tx.send((total_size, total_size));
+        }
 
-            tracing::info!(
-                "File {} succesfully uploaded to {} folder",
-                file_name,
-                upload_path.display().to_string()
-            );
-            match is_zip_file(std::path::Path::new(&format!(
-                "{}/{}",
-                &upload_path.display(),
-                file_name
-            ))) {
-                Ok(result) => {
-                    if result {
-                        extract_zip(format!("{}/{}", &upload_path.display(), file_name));
-                        if let Err(err) =
-                            fs::remove_file(format!("{}/{}", &upload_path.display(), file_name))
-                        {
-                            return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
-                        }
+        tracing::info!(
+            "File {} succesfully uploaded to {} folder",
+            file_name,
+            upload_path.display().to_string()
+        );
+
+        match is_zip_file(std::path::Path::new(&format!(
+            "{}/{}",
+            &upload_path.display(),
+            file_name
+        ))) {
+            Ok(result) => {
+                if result {
+                    extract_zip(format!("{}/{}", &upload_path.display(), file_name));
+                    if let Err(err) =
+                        fs::remove_file(format!("{}/{}", &upload_path.display(), file_name))
+                    {
+                        return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
                     }
                 }
-                Err(err) => {
-                    tracing::error!("{}", err);
-                    return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
-                }
-            };
-        }
+            }
+            Err(err) => {
+                tracing::error!("{}", err);
+                return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
+            }
+        };
     } else {
         return Err((StatusCode::BAD_REQUEST, "No repository found".to_string()));
     }
@@ -216,6 +218,7 @@ fn is_zip_file(file_path: &std::path::Path) -> io::Result<bool> {
     file.read_exact(&mut signature)?;
     Ok(signature == [0x50, 0x4B, 0x03, 0x04])
 }
+
 fn extract_zip(file_name: String) {
     let file = fs::File::open(file_name).unwrap();
 
