@@ -234,15 +234,15 @@ fn extract_zip(file_name: String) {
         {
             let comment = file.comment();
             if !comment.is_empty() {
-                println!("File {i} comment: {comment}");
+                tracing::info!("File {i} comment: {comment}");
             }
         }
 
         if file.is_dir() {
-            println!("File {} extracted to \"{}\"", i, outpath.display());
+            tracing::info!("File {} extracted to \"{}\"", i, outpath.display());
             fs::create_dir_all(&outpath).unwrap();
         } else {
-            println!("File {} extracted to \"{}\" ({} bytes)", i, outpath.display(), file.size());
+            tracing::info!("File {} extracted to \"{}\" ({} bytes)", i, outpath.display(), file.size());
             if let Some(p) = outpath.parent() {
                 if !p.exists() {
                     fs::create_dir_all(p).unwrap();
