@@ -56,6 +56,7 @@ pub async fn http_api() {
     let recorder_handle = setup_metrics_recorder();
 
     let app = Router::new()
+        .nest_service("/{*wildcard}", serve_dir.clone())
         .route("/health", get(health_check))
         .route("/metrics", get(move || ready(recorder_handle.render())))
         .route(
