@@ -1,5 +1,6 @@
 use axum::{
     extract::{DefaultBodyLimit, MatchedPath, Multipart, Path, Request},
+    handler::HandlerWithoutStateExt,
     http::{header::CONTENT_LENGTH, HeaderMap, StatusCode},
     middleware::{self, Next},
     response::{
@@ -52,8 +53,14 @@ pub async fn http_api() {
     let local_addr = listener.local_addr().unwrap();
     tracing::info!("HTTP listening on {local_addr}");
 
-    let serve_dir = ServeDir::new(".");
     let recorder_handle = setup_metrics_recorder();
+
+    async fn handle_404() -> (StatusCode, &'static str) {
+        (StatusCode::NOT_FOUND, "Not found")
+    }
+
+    let service = handle_404.into_service();
+    let serve_dir = ServeDir::new(".").not_found_service(service);
 
     let app = Router::new()
         .route("/health", get(health_check))
@@ -77,9 +84,9 @@ pub async fn http_api() {
             }),
         )
         .route("/{repo}/progression", get(move || sse_handler(progress_tx)))
+        .route_service("/{repo}/{platform}", serve_dir)
         .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn(track_metrics))
-        .fallback_service(serve_dir)
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
         .layer(TraceLayer::new_for_http());
 
