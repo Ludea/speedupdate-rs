@@ -7,7 +7,7 @@ use axum::{
         sse::{Event, Sse},
         IntoResponse,
     },
-    routing::{get, post},
+    routing::{get, post, get_service},
     Router,
 };
 use futures::stream::Stream;
@@ -84,7 +84,7 @@ pub async fn http_api() {
             }),
         )
         .route("/{repo}/progression", get(move || sse_handler(progress_tx)))
-        .route_service("/{repo}/{platform}", serve_dir)
+        .route_service("/{repo}/{platform}", get_service(serve_dir))
         .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn(track_metrics))
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
