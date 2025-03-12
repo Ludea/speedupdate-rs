@@ -7,13 +7,14 @@ use axum::{
         sse::{Event, Sse},
         IntoResponse,
     },
-    routing::{get, post, get_service},
+    routing::{get, get_service, on, post, MethodFilter},
     Router,
 };
 use futures::stream::Stream;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use std::io::{self, Read};
 use std::{convert::Infallible, fs, future::ready, net::SocketAddr};
+use tokio::time::{sleep, Duration};
 use tokio::{
     fs::File,
     io::AsyncWriteExt,
@@ -26,6 +27,7 @@ use tower_http::{
     services::ServeDir,
     trace::TraceLayer,
 };
+use zip::result::ZipError;
 
 async fn health_check() -> &'static str {
     "OK"
@@ -67,12 +69,13 @@ pub async fn http_api() {
         .route("/metrics", get(move || ready(recorder_handle.render())))
         .route(
             "/{repo}/{folder}/{platform}",
-            post({
+            on(MethodFilter::POST, {
                 let progress_tx = progress_tx.clone();
                 move |header, path, multipart| {
                     save_binaries(progress_tx.clone(), header, path, multipart)
                 }
-            }),
+            })
+            .on(MethodFilter::GET, get_service(serve_dir)),
         )
         .route(
             "/{repo}",
@@ -84,7 +87,7 @@ pub async fn http_api() {
             }),
         )
         .route("/{repo}/progression", get(move || sse_handler(progress_tx)))
-        .route_service("/{repo}/{platform}", get_service(serve_dir))
+        //.route_service("/{repo}/{platform}", get_service(serve_dir))
         .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn(track_metrics))
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
@@ -178,6 +181,8 @@ async fn upload(
             upload_path.display().to_string()
         );
 
+        sleep(Duration::from_secs(2)).await;
+
         match is_zip_file(std::path::Path::new(&format!(
             "{}/{}",
             &upload_path.display(),
@@ -185,7 +190,11 @@ async fn upload(
         ))) {
             Ok(result) => {
                 if result {
-                    extract_zip(format!("{}/{}", &upload_path.display(), file_name));
+                    if let Err(err) =
+                        extract_zip(format!("{}/{}", &upload_path.display(), file_name))
+                    {
+                        return Err((StatusCode::INTERNAL_SERVER_ERROR, err.to_string()));
+                    }
                     if let Err(err) =
                         fs::remove_file(format!("{}/{}", &upload_path.display(), file_name))
                     {
@@ -226,10 +235,10 @@ fn is_zip_file(file_path: &std::path::Path) -> io::Result<bool> {
     Ok(signature == [0x50, 0x4B, 0x03, 0x04])
 }
 
-fn extract_zip(file_name: String) {
+fn extract_zip(file_name: String) -> Result<(), ZipError> {
     let file = fs::File::open(&file_name).unwrap();
 
-    let mut archive = zip::ZipArchive::new(file).unwrap();
+    let mut archive = zip::ZipArchive::new(file)?;
 
     for i in 0..archive.len() {
         let mut file = archive.by_index(i).unwrap();
@@ -278,4 +287,5 @@ fn extract_zip(file_name: String) {
             }
         }
     }
+    Ok(())
 }
