@@ -34,7 +34,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
 use tonic::{
-    body::BoxBody, codec::CompressionEncoding, service::{Routes, LayerExt as _}, transport::Server, Request,
+    body::BoxBody, codec::CompressionEncoding, service::Routes, transport::Server, Request,
     Response, Status,
 };
 use tonic_web::GrpcWebLayer;
@@ -645,8 +645,7 @@ pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
         ])
         .expose_headers(Any);
 
-    let service = tower::ServiceBuilder::new().layer(AuthMiddlewareLayer::default()).into_inner()
-.named_layer(service);
+    let layer = tower::ServiceBuilder::new().layer(AuthMiddlewareLayer::default()).into_inner();
 
     let mut routes = Routes::builder();
     routes.add_service(service);
@@ -654,15 +653,14 @@ pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("Speedupdate gRPC server listening on {addr}");
 
     //Server::builder()
-    let router = routes
+    let router: axum::Router = routes
         .routes()
         .into_axum_router()
         //.accept_http1(true)
-        //.layer(cors_layer)
+        .layer(cors_layer)
         .layer(layer)
         .layer(GrpcWebLayer::new());
     //.add_service(service)
-
     //        .serve(addr)
     //        .await?;
     //
