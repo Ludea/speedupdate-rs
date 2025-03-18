@@ -50,7 +50,7 @@ fn setup_metrics_recorder() -> PrometheusHandle {
 pub async fn http_api() {
     let (progress_tx, _) = broadcast::channel(100);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     let local_addr = listener.local_addr().unwrap();
     tracing::info!("HTTP listening on {local_addr}");
@@ -68,7 +68,7 @@ pub async fn http_api() {
         .route("/health", get(health_check))
         .route("/metrics", get(move || ready(recorder_handle.render())))
         .route(
-            "/{repo}/{folder}/{platform}",
+            "/{repo}/{type}/{folder}/{platform}",
             on(MethodFilter::POST, {
                 let progress_tx = progress_tx.clone();
                 move |header, path, multipart| {
@@ -78,7 +78,7 @@ pub async fn http_api() {
             .on(MethodFilter::GET, get_service(serve_dir)),
         )
         .route(
-            "/{repo}",
+            "/{repo}/launcher",
             post({
                 let progress_tx = progress_tx.clone();
                 move |header, path, multipart| {
@@ -86,8 +86,7 @@ pub async fn http_api() {
                 }
             }),
         )
-        .route("/{repo}/progression", get(move || sse_handler(progress_tx)))
-        //.route_service("/{repo}/{platform}", get_service(serve_dir))
+        .route("/{repo}/{type}/progression", get(move || sse_handler(progress_tx)))
         .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn(track_metrics))
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
@@ -113,11 +112,11 @@ async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
 async fn save_binaries(
     progress_tx: Sender<(usize, usize)>,
     header: HeaderMap,
-    Path((repo, folder, platform)): Path<(String, String, String)>,
+    Path((repo, launcher_game, folder, platform)): Path<(String, String, String, String)>,
     multipart: Multipart,
 ) -> Result<(), (StatusCode, String)> {
     let repo_path = std::path::Path::new(&repo);
-    let folder_path = format!("{}/{}/{}", repo.clone(), folder.clone(), platform);
+    let folder_path = format!("{}/{}/{}/{}", repo.clone(), launcher_game, folder, platform);
     let upload_path = std::path::Path::new(&folder_path);
 
     upload(progress_tx, multipart, header, repo_path, upload_path).await?;
