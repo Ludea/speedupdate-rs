@@ -37,7 +37,7 @@ http-body-util = "0.1.2"
 zip = "2.2.2"
 
 [build-dependencies]
-tonic-build = { version = "0.12.1", features = ["prost"] }
+tonic-build = { version = "0.13.0", features = ["prost"] }
 prost-build = "0.13"
 protox = "0.7"
 
