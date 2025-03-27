@@ -38,6 +38,11 @@ ingressroute:
   className: ""
   host: your.example.com
 
+persistence:
+  enabled: true
+  size: 500Mi
+  storageClass: local-path
+
 resources: {}
   # limits:
   #   cpu: 100m
