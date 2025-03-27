@@ -1,17 +1,3 @@
-use futures::prelude::*;
-use libspeedupdate::{
-    metadata::{v1, CleanName},
-    repository::{BuildOptions, CoderOptions, PackageBuilder},
-    workspace::{UpdateOptions, Workspace},
-    Repository,
-};
-use notify::{Config, RecursiveMode, Watcher};
-use serde::{Deserialize, Serialize};
-use speedupdaterpc::repo_server::{Repo, RepoServer};
-use speedupdaterpc::{
-    BuildInput, BuildOutput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Options, Package,
-    Platforms, RepoStatus, RepoStatusOutput, RepositoryPath, RepositoryStatus, Version, Versions,
-};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -21,21 +7,33 @@ use std::{
 };
 
 use base64::{engine::general_purpose, Engine as _};
+use futures::prelude::*;
 use http::header::{AUTHORIZATION, CONTENT_TYPE};
 use http_body_util::BodyExt;
 use http_body_util::Full;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use libspeedupdate::{
+    metadata::{v1, CleanName},
+    repository::{BuildOptions, CoderOptions, PackageBuilder},
+    workspace::{UpdateOptions, Workspace},
+    Repository,
+};
+use notify::{Config, RecursiveMode, Watcher};
 use ring::{
     rand,
     signature::{EcdsaKeyPair, KeyPair},
+};
+use serde::{Deserialize, Serialize};
+use speedupdaterpc::repo_server::{Repo, RepoServer};
+use speedupdaterpc::{
+    BuildInput, BuildOutput, CurrentVersion, Empty, FileToDelete, ListPackVerBin, Options, Package,
+    Platforms, RepoStatus, RepoStatusOutput, RepositoryPath, RepositoryStatus, Version, Versions,
 };
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
-use tonic::{
-    body::BoxBody, codec::CompressionEncoding, transport::Server, Request, Response, Status,
-};
+use tonic::{codec::CompressionEncoding, transport::Server, Request, Response, Status};
 use tonic_web::GrpcWebLayer;
 use tower::{Layer, Service};
 use tower_http::cors::{Any, CorsLayer};
@@ -678,13 +676,11 @@ pub struct AuthMiddleware<S> {
 
 type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
-impl<S> Service<hyper::Request<BoxBody>> for AuthMiddleware<S>
+impl<S, ReqBody, ResBody> Service<http::Request<ReqBody>> for AuthMiddleware<S>
 where
-    S: Service<hyper::Request<BoxBody>, Response = hyper::Response<BoxBody>>
-        + Clone
-        + Send
-        + 'static,
+    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
+    ReqBody: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -694,12 +690,12 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: hyper::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
         Box::pin(async move {
-            let (parts, body) = req.into_parts();
+            //let (parts, body) = req.into_parts();
             let encoded_pkcs8 = fs::read_to_string("pkey").unwrap();
             let decoded_pkcs8 = general_purpose::STANDARD.decode(encoded_pkcs8).unwrap();
             let rng = &rand::SystemRandom::new();
@@ -711,49 +707,50 @@ where
             .unwrap();
             let decoding_key = &DecodingKey::from_ec_der(pair.public_key().as_ref());
 
-            let content = body.collect().await.unwrap().to_bytes();
-            let content_vec = content.to_vec();
-            let content_string = String::from_utf8(content_vec).unwrap();
-            let content_without_ascii: Vec<_> =
-                content_string.chars().filter(|&c| !(c as u32 <= 0x001F)).collect();
-            let content_string_without_ascii: String = content_without_ascii.into_iter().collect();
-            let content_without_path = content_string_without_ascii
-                .replace("/win64", "")
-                .replace("/macos_arm64", "")
-                .replace("/macos_x86_64", "")
-                .replace("/linux", "");
-
+            /* let content = body.collect().await.unwrap().to_bytes();
+                        let content_vec = content.to_vec();
+                        let content_string = String::from_utf8(content_vec).unwrap();
+                        let content_without_ascii: Vec<_> =
+                            content_string.chars().filter(|&c| !(c as u32 <= 0x001F)).collect();
+                        let content_string_without_ascii: String = content_without_ascii.into_iter().collect();
+                        let content_without_path = content_string_without_ascii
+                            .replace("/win64", "")
+                            .replace("/macos_arm64", "")
+                            .replace("/macos_x86_64", "")
+                            .replace("/linux", "");
+            */
             // println!("content : {:?}", content_without_path);
 
-            match parts.headers.get("authorization") {
-                Some(t) => {
-                    let validation = &mut Validation::new(Algorithm::ES256);
-                    validation.validate_exp = false;
-                    let t_string = t.to_str().unwrap().replace("Bearer ", "");
-                    match decode::<Claims>(&t_string, decoding_key, validation) {
-                        Ok(token_data) => {
-                            // Compare body with scope
-                            if token_data.claims.scope == content_without_path {
-                                let body = BoxBody::new(
-                                    Full::new(content)
-                                        .map_err(|err| Status::internal(err.to_string())),
-                                );
-                                let response =
-                                    inner.call(http::Request::from_parts(parts, body)).await?;
-                                return Ok(response);
-                            } else {
-                                //return Err(Status::unauthenticated("Not allowed"));
+            /* match parts.headers.get("authorization") {
+                            Some(t) => {
+                                let validation = &mut Validation::new(Algorithm::ES256);
+                                validation.validate_exp = false;
+                                let t_string = t.to_str().unwrap().replace("Bearer ", "");
+                                match decode::<Claims>(&t_string, decoding_key, validation) {
+                                    Ok(token_data) => {
+                                        // Compare body with scope
+                                        if token_data.claims.scope == content_without_path {
+                                            let body = BoxBody::new(
+                                                Full::new(content)
+                                                    .map_err(|err| Status::internal(err.to_string())),
+                                            );
+                                            let response =
+                                                inner.call(http::Request::from_parts(parts, body)).await?;
+                                            return Ok(response);
+                                        } else {
+                                            //return Err(Status::unauthenticated("Not allowed"));
+                                        }
+                                    }
+                                    Err(err) => {} //return Err(Status::unauthenticated(err.to_string())),
+                                }
                             }
+                            None => {} //return Err(Status::unauthenticated("No token found")),
                         }
-                        Err(err) => {} //return Err(Status::unauthenticated(err.to_string())),
-                    }
-                }
-                None => {} //return Err(Status::unauthenticated("No token found")),
-            }
-
-            let body =
-                BoxBody::new(Full::new(content).map_err(|err| Status::internal(err.to_string())));
-            let response = inner.call(http::Request::from_parts(parts, body)).await?;
+            */
+            //          let body =
+            //            BoxBody::new(Full::new(content).map_err(|err| Status::internal(err.to_string())));
+            //let response = http::Response::from_parts(parts, body);
+            let response = inner.call(req).await?;
             Ok(response)
         })
     }

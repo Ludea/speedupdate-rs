@@ -1,15 +1,16 @@
 //! Progression reporting helpers
+use std::cell::{Ref, RefCell, RefMut};
+use std::fmt;
+use std::ops::{Add, AddAssign, Div, Sub, SubAssign};
+use std::rc::Rc;
+use std::sync::Arc;
+
 use super::updater::UpdateFilter;
 use super::UpdatePosition;
 use crate::histogram::Histogram;
 use crate::io;
 use crate::metadata::v1::StateUpdating;
 use crate::metadata::{self, CleanName, CleanPath, Operation};
-use std::cell::{Ref, RefCell, RefMut};
-use std::fmt;
-use std::ops::{Add, AddAssign, Div, Sub, SubAssign};
-use std::rc::Rc;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct SharedCheckProgress {

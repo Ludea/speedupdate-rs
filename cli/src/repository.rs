@@ -1,4 +1,9 @@
-use crate::LOGGER;
+use std::fmt::Display;
+use std::fs;
+use std::io::Read;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
+
 use byte_unit::Byte;
 use clap::ArgMatches;
 use console::{style, Term};
@@ -9,11 +14,8 @@ use libspeedupdate::repository::{BuildOptions, CoderOptions, PackageBuilder};
 use libspeedupdate::workspace::{UpdateOptions, Workspace};
 use libspeedupdate::Repository;
 use log::{error, info};
-use std::fmt::Display;
-use std::fs;
-use std::io::Read;
-use std::ops::Deref;
-use std::path::{Path, PathBuf};
+
+use crate::LOGGER;
 
 fn some_<T>(res: Option<T>, ctx: &str) -> T {
     match res {

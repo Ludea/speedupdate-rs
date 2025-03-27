@@ -1,5 +1,6 @@
-use protox::prost::Message;
 use std::{env, fs, path::PathBuf};
+
+use protox::prost::Message;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file_descriptors = protox::compile(["proto/speedupdate.proto"], ["."]).unwrap();

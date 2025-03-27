@@ -1,3 +1,6 @@
+use std::io::{self, Read};
+use std::{convert::Infallible, fs, future::ready, net::SocketAddr};
+
 use axum::{
     extract::{DefaultBodyLimit, MatchedPath, Multipart, Path, Request},
     handler::HandlerWithoutStateExt,
@@ -12,8 +15,6 @@ use axum::{
 };
 use futures::stream::Stream;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use std::io::{self, Read};
-use std::{convert::Infallible, fs, future::ready, net::SocketAddr};
 use tokio::time::{sleep, Duration};
 use tokio::{
     fs::File,

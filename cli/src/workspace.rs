@@ -1,4 +1,7 @@
-use crate::LOGGER;
+use std::ops::Deref;
+use std::path::Path;
+use std::process;
+
 use clap::ArgMatches;
 use console::{style, Term};
 use futures::prelude::*;
@@ -7,9 +10,8 @@ use libspeedupdate::link::{AutoRepository, RemoteRepository};
 use libspeedupdate::metadata::{self, v1::State, CleanName, Operation};
 use libspeedupdate::workspace::{UpdateOptions, Workspace};
 use log::error;
-use std::ops::Deref;
-use std::path::Path;
-use std::process;
+
+use crate::LOGGER;
 
 pub fn arg_repository(matches: &ArgMatches) -> Option<AutoRepository> {
     match matches.get_one::<String>("repository") {
