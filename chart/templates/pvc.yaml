@@ -1,12 +1,13 @@
+{{- if .Values.persistence.enabled -}}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "speedupdate_chart.fullname" . }}
-  labels:
-    {{- include "speedupdate_chart.labels" . | nindent 4 }}
+  name: speedupdate
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: {{ .Values.persistence.storageClass }}
   resources:
     requests:
-      storage: 3Gi
+      storage: {{ .Values.persistence.size }}
+{{- end }}
