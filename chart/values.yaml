@@ -36,8 +36,8 @@ ingressroute:
   host: your.example.com
 
 persistence:
-  enabled: true
-  size: 500Mi
+  enabled: false
+  size: 1Gi
   storageClass: local-path
 
 resources: {}
