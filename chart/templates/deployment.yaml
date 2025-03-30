@@ -38,16 +38,7 @@ spec:
           mountPath: /opt/speedupdate
         ports:
           - name: http
-            containerPort: 8080
-            protocol: TCP
-          - name: grpc
-            containerPort: 3000
-            protocol: TCP
-          - name: ftp
-            containerPort: 2121
-            protocol: TCP
-          - name: metrics
-            containerPort: 3001
+            containerPort: 8012
             protocol: TCP
         livenessProbe:
           httpGet:
