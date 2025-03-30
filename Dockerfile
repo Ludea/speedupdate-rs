@@ -11,9 +11,7 @@ RUN chmod +x /usr/local/bin/speedupdateserver
 RUN chmod +x /usr/local/bin/speedupdate
 
 COPY pkey .
-EXPOSE 3000
-EXPOSE 3001
-EXPOSE 8080
-EXPOSE 2121
+
+EXPOSE 8012
 
 CMD ["speedupdateserver"] 
