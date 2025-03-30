@@ -25,7 +25,7 @@ async fn main() {
         )
         .init();
 
-    let addr: SocketAddrV4 = "0.0.0.0:8000".parse().unwrap();
+    let addr: SocketAddrV4 = "0.0.0.0:8012".parse().unwrap();
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
     let grpc = rpc::rpc_api();
