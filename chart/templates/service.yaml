@@ -7,22 +7,10 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   ports:
-    - port: {{ .Values.service.httpport }}
-      targetPort: 8080
+    - port: {{ .Values.service.port }}
+      targetPort: 8012
       protocol: TCP
       name: http
-    - port: {{ .Values.service.grpcport }}
-      targetPort: 3000
-      protocol: TCP
-      name: grpc
-    - port: {{ .Values.service.ftpport }}
-      targetPort: 2121
-      protocol: TCP
-      name: ftp
-    - port: {{ .Values.service.metricport }}
-      targetPort: 3001
-      protocol: TCP
-      name: metrics
   selector:
     {{- include "speedupdate_chart.selectorLabels" . | nindent 4 }}
  
