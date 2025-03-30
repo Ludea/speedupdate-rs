@@ -28,10 +28,7 @@ securityContext: {}
 
 service:
   type: ClusterIP
-  httpport: 8080
-  grpcport: 3000
-  ftpport: 2121
-  metricport: 3001
+  port: 8012
   
 ingressroute:
   enabled: false
