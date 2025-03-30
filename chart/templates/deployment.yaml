@@ -47,7 +47,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /health
-            port: 80812
+            port: 8012
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
       volumes:
