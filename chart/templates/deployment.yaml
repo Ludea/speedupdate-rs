@@ -43,11 +43,11 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 8080
+            port: 8012
         readinessProbe:
           httpGet:
             path: /health
-            port: 8080
+            port: 80812
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
       volumes:
