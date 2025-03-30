@@ -10,7 +10,6 @@ use base64::{engine::general_purpose, Engine as _};
 use futures::prelude::*;
 use http::header::{AUTHORIZATION, CONTENT_TYPE};
 use http_body_util::BodyExt;
-use http_body_util::Full;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use libspeedupdate::{
     metadata::{v1, CleanName},
@@ -33,7 +32,11 @@ use tokio::select;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
-use tonic::{codec::CompressionEncoding, transport::Server, Request, Response, Status};
+use tonic::{
+    codec::CompressionEncoding,
+    service::{AxumRouter, Routes},
+    Request, Response, Status,
+};
 use tonic_web::GrpcWebLayer;
 use tower::{Layer, Service};
 use tower_http::cors::{Any, CorsLayer};
@@ -618,13 +621,14 @@ where
     select_task.await.unwrap()
 }
 
-pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "0.0.0.0:3000".parse().unwrap();
-
+pub fn rpc_api() -> AxumRouter {
     let repo = RemoteRepository {};
     let service = RepoServer::new(repo)
         .send_compressed(CompressionEncoding::Gzip)
         .accept_compressed(CompressionEncoding::Gzip);
+
+    let mut routes = Routes::builder();
+    routes.add_service(service);
 
     let origins = [
         "http://localhost:8080".parse().unwrap(),
@@ -644,18 +648,7 @@ pub async fn rpc_api() -> Result<(), Box<dyn std::error::Error>> {
 
     let layer = tower::ServiceBuilder::new().layer(AuthMiddlewareLayer::default()).into_inner();
 
-    tracing::info!("Speedupdate gRPC server listening on {addr}");
-
-    Server::builder()
-        .accept_http1(true)
-        .layer(cors_layer)
-        .layer(layer)
-        .layer(GrpcWebLayer::new())
-        .add_service(service)
-        .serve(addr)
-        .await?;
-
-    Ok(())
+    routes.routes().into_axum_router().layer(GrpcWebLayer::new()).layer(cors_layer).layer(layer)
 }
 
 #[derive(Debug, Clone, Default)]

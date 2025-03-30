@@ -1,3 +1,6 @@
+use std::net::SocketAddrV4;
+
+use axum::Router;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 //mod ftp;
@@ -22,8 +25,16 @@ async fn main() {
         )
         .init();
 
-    if let Err(err) = tokio::join!(rpc::rpc_api(), http::http_api()).0 {
-        tracing::error!("Unable to start Speedupdate gRPC and HTTP server: {err}");
-    }
+    let addr: SocketAddrV4 = "0.0.0.0:8000".parse().unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+
+    let grpc = rpc::rpc_api();
+    let http = http::http_api();
+    let app = Router::new().merge(grpc).merge(http);
+
+    tracing::info!("Speedupdate gRPC and http server listening on {addr}");
+
+    axum::serve(listener, app).await.unwrap();
+
     //let ftp_server = tokio::spawn(ftp::start_ftp_server());
 }

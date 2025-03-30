@@ -1,5 +1,9 @@
-use std::io::{self, Read};
-use std::{convert::Infallible, fs, future::ready, net::SocketAddr};
+use std::{
+    convert::Infallible,
+    fs,
+    future::ready,
+    io::{self, Read},
+};
 
 use axum::{
     extract::{DefaultBodyLimit, MatchedPath, Multipart, Path, Request},
@@ -48,13 +52,8 @@ fn setup_metrics_recorder() -> PrometheusHandle {
         .unwrap()
 }
 
-pub async fn http_api() {
+pub fn http_api() -> Router {
     let (progress_tx, _) = broadcast::channel(100);
-
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    let local_addr = listener.local_addr().unwrap();
-    tracing::info!("HTTP listening on {local_addr}");
 
     let recorder_handle = setup_metrics_recorder();
 
@@ -65,7 +64,7 @@ pub async fn http_api() {
     let service = handle_404.into_service();
     let serve_dir = ServeDir::new(".").not_found_service(service);
 
-    let app = Router::new()
+    Router::new()
         .route("/health", get(health_check))
         .route("/metrics", get(move || ready(recorder_handle.render())))
         .route(
@@ -91,9 +90,7 @@ pub async fn http_api() {
         .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn(track_metrics))
         .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any))
-        .layer(TraceLayer::new_for_http());
-
-    axum::serve(listener, app).await.unwrap();
+        .layer(TraceLayer::new_for_http())
 }
 
 async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
