@@ -34,7 +34,7 @@ jobs:
         uses: helm/kind-action@v1
 
       - name: Run chart-testing (install)
-        run: ct install --chart-dirs chart/ --charts chart/  --helm-extra-set-args "--set=persistence=false"
+        run: ct install --chart-dirs chart/ --charts chart/  --helm-extra-set-args "--set=persistence.enabled=false"
 
       - name: Get version
         uses: mikefarah/yq@v4
