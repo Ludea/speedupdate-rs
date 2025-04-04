@@ -683,7 +683,7 @@ where
 
         Box::pin(async move {
             //let (parts, body) = req.into_parts();
-            let encoded_pkcs8 = fs::read_to_string("pkey").unwrap();
+            /*let encoded_pkcs8 = fs::read_to_string("pkey").unwrap();
             let decoded_pkcs8 = general_purpose::STANDARD.decode(encoded_pkcs8).unwrap();
             let rng = &rand::SystemRandom::new();
             let pair = EcdsaKeyPair::from_pkcs8(
@@ -693,7 +693,7 @@ where
             )
             .unwrap();
             let decoding_key = &DecodingKey::from_ec_der(pair.public_key().as_ref());
-
+*/
             /* let content = body.collect().await.unwrap().to_bytes();
                         let content_vec = content.to_vec();
                         let content_string = String::from_utf8(content_vec).unwrap();
