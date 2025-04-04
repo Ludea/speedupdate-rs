@@ -4,16 +4,13 @@ RUN apk upgrade
 
 WORKDIR /opt/speedupdate
 
-COPY speedupdate-$TARGETARCH/speedupdate /usr/local/bin/foo/speedupdate
-COPY speedupdate-$TARGETARCH/speedupdateserver /usr/local/bin/foo/speedupdateserver
+COPY speedupdate-$TARGETARCH/speedupdate /usr/local/bin/speedupdate
+COPY speedupdate-$TARGETARCH/speedupdateserver /usr/local/bin/speedupdateserver
 
-RUN chmod +x /usr/local/bin/foo/speedupdateserver
-RUN chmod +x /usr/local/bin/foo/speedupdate
+RUN chmod +x /usr/local/bin/speedupdateserver
+RUN chmod +x /usr/local/bin/speedupdate
 
-RUN ln -s /usr/local/bin/foo/speedupdate/usr/local/bin/speedupdate
-RUN ln -s /usr/local/bin/foo/speedupdateserver /usr/local/bin/speedupdateserver
-
-COPY pkey /usr/local/bin/foo/
+COPY pkey .
 
 EXPOSE 8012
 
