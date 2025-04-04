@@ -30,11 +30,11 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
     let grpc = rpc::rpc_api();
-//    let http = http::http_api();
-//    let app = Router::new()
-//        .merge(grpc)
-//        .merge(http)
-//        .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any));
+    let http = http::http_api();
+    let app = Router::new()
+        .merge(grpc)
+        .merge(http)
+        .layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any));
 
     tracing::info!("Speedupdate gRPC and http server listening on {addr}");
 
