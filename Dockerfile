@@ -4,8 +4,8 @@ RUN apk upgrade
 
 WORKDIR /opt/speedupdate
 
-COPY speedupdate-$TARGETARCH/speedupdate /usr/local/bin/speedupdate/speedupdate
-COPY speedupdate-$TARGETARCH/speedupdateserver /usr/local/bin/speedupdate/speedupdateserver
+COPY speedupdate-$TARGETARCH/speedupdate /usr/local/bin/foo/speedupdate
+COPY speedupdate-$TARGETARCH/speedupdateserver /usr/local/bin/foo/speedupdateserver
 
 RUN chmod +x /usr/local/bin/foo/speedupdateserver
 RUN chmod +x /usr/local/bin/foo/speedupdate
