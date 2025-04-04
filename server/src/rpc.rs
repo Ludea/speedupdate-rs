@@ -630,12 +630,6 @@ pub fn rpc_api() -> AxumRouter {
     let mut routes = Routes::builder();
     routes.add_service(service);
 
-    /*    let origins = [
-            "http://localhost:8080".parse().unwrap(),
-            "http://localhost:5173".parse().unwrap(),
-            "https://web.marlin-atlas.ts.net".parse().unwrap(),
-        ];
-    */
     let cors_layer = CorsLayer::new()
         .allow_origin(Any)
         .allow_headers([

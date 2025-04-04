@@ -1,6 +1,7 @@
 use std::net::SocketAddrV4;
 
 use axum::Router;
+use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 //mod ftp;
@@ -30,7 +31,7 @@ async fn main() {
 
     let grpc = rpc::rpc_api();
     let http = http::http_api();
-    let app = Router::new().merge(grpc).merge(http);
+    let app = Router::new().merge(grpc).merge(http).layer(CorsLayer::new().allow_origin(Any).allow_headers(Any).expose_headers(Any));
 
     tracing::info!("Speedupdate gRPC and http server listening on {addr}");
 
