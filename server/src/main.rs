@@ -38,7 +38,7 @@ async fn main() {
 
     tracing::info!("Speedupdate gRPC and http server listening on {addr}");
 
-    axum::serve(listener, grpc).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 
     //let ftp_server = tokio::spawn(ftp::start_ftp_server());
 }
