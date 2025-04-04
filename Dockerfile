@@ -10,7 +10,7 @@ COPY speedupdate-$TARGETARCH/speedupdateserver /usr/local/bin/speedupdate/speedu
 RUN chmod +x /usr/local/bin/speedupdate/speedupdateserver
 RUN chmod +x /usr/local/bin/speedupdate/speedupdate
 
-RUN ln -s /usr/local/bin/speedupdate/speedupdate /usr/local/bin/speedupdate
+RUN ln -s /usr/local/bin/speedupdate /usr/local/bin/speedupdate/speedupdate
 RUN ln -s /usr/local/bin/speedupdate/speedupdateserver /usr/local/bin/speedupdateserver
 
 COPY pkey /usr/local/bin/speedupdate/
