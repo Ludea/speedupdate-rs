@@ -34,7 +34,7 @@ jsonwebtoken = "9.3.0"
 base64 = "0.22.1"
 ring = "0.17.8"
 http-body-util = "0.1.2"
-zip = "2.2.2"
+zip = "3.0.0"
 
 [build-dependencies]
 tonic-build = { version = "0.13.0", features = ["prost"] }
