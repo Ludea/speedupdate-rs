@@ -69,10 +69,7 @@ impl RemoteRepository for FileRepository {
         if new_pos != range.start {
             return Err(RepositoryError::file(
                 &path,
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "failed to seek at the correct position",
-                ),
+                std::io::Error::other("failed to seek at the correct position"),
             ));
         }
 

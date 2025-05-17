@@ -180,8 +180,7 @@ impl<'a> Handler<'a> {
                 op.local_sha1.clone(),
             ),
             _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
+                return Err(io::Error::other(
                     "ue4pak is only support for add, patch and check operations".to_string(),
                 ))
             }

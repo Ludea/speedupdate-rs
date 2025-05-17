@@ -239,10 +239,10 @@ impl ApplyOperation for metadata::v1::Operation {
                 return Ok(Box::new(handler));
             }
 
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("slice handler {} isn't supported!", handler_name),
-            ));
+            return Err(io::Error::other(format!(
+                "slice handler {} isn't supported!",
+                handler_name
+            )));
         }
 
         Ok(Box::new(DefaultHandler::new(ctx)))
