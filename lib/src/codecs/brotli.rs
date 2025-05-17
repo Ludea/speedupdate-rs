@@ -12,9 +12,8 @@ impl<W: Write> Coder<W> for DecompressorWriter<W> {
 
     fn finish(mut self) -> io::Result<W> {
         self.flush()?;
-        DecompressorWriter::finish(self).map_err(|_| {
-            io::Error::new(io::ErrorKind::Other, "brotli decoder failed to finalize stream")
-        })
+        DecompressorWriter::finish(self)
+            .map_err(|_| io::Error::other("brotli decoder failed to finalize stream"))
         //Ok(DecompressorWriter::into_inner(self))
     }
 

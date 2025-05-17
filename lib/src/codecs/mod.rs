@@ -378,10 +378,7 @@ where
         return Ok(BoxCoderDirect::boxed(raw::Writer(output)));
     }
 
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        format!("encoder {} isn't supported!", encoder_options.name()),
-    ))
+    Err(io::Error::other(format!("encoder {} isn't supported!", encoder_options.name())))
 }
 
 pub fn decoder<'a, W>(
@@ -422,10 +419,7 @@ where
         return Ok(B::boxed(raw::Writer(output)));
     }
 
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        format!("decompressor {} isn't supported!", decompressor_name),
-    ))
+    Err(io::Error::other(format!("decompressor {} isn't supported!", decompressor_name)))
 }
 
 pub fn patch_encoder<'a, L, W>(
@@ -459,7 +453,7 @@ where
         return Ok(Box::new(raw::Writer(output)));
     }
 
-    Err(io::Error::new(io::ErrorKind::Other, "not implemented!"))
+    Err(io::Error::other("not implemented!"))
 }
 
 pub fn patch_decoder<'a, L, W>(
@@ -492,5 +486,5 @@ where
         return decoder(decompressor_name, output);
     }
 
-    Err(io::Error::new(io::ErrorKind::Other, "not implemented!"))
+    Err(io::Error::other("not implemented!"))
 }
