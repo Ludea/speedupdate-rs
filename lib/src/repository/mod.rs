@@ -5,8 +5,7 @@
 //! - `current`: a very small JSON file with informations about the current version.
 //! - `versions`: a JSON file with informations about all versions.
 //! - `packages`: a JSON file that list available packages (i.e. the update graph).
-//! - `$package_name.metadata`: a JSON file with precise informations about a package
-//!  and how to apply it.
+//! - `$package_name.metadata`: a JSON file with precise informations about a package and how to apply it.
 //! - `$package_name`: a binary file containing package update operations data.
 //!
 //! ## Safety

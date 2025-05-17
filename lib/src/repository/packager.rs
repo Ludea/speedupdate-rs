@@ -349,7 +349,7 @@ impl PackageBuilder {
 
 fn err(msg: &str) -> io::Error {
     error!("{}", msg);
-    io::Error::new(io::ErrorKind::Other, msg)
+    io::Error::other(msg)
 }
 
 #[cfg(unix)]
