@@ -12,9 +12,17 @@ env:
 jobs:            
   build:
     strategy:
-      fail-fast: false
+      fail-fast: false 
       matrix:
-        platform: [macos-14, ubuntu-24.04, windows-2022]
+        include:
+          - platform: 'macos-latest' 
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'  
+            args: '--target x86_64-apple-darwin'
+          - platform: 'ubuntu-24.04'
+            args: ''
+          - platform: 'windows-latest'
+            args: ''
             
     runs-on: ${{ matrix.platform }}        
     steps:
@@ -25,13 +33,14 @@ jobs:
       - name: Set Github sha short (Windows) 
         if: matrix.platform == 'windows-2022' 
         run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $env:GITHUB_ENV 
-    
       - name: install deps
         if: matrix.platform == 'ubuntu-24.04' 
         run: sudo apt update && sudo apt install -y musl-dev musl-tools
       - name: 'Setup Rust on Windows and MacOS'
         if: matrix.platform != 'ubuntu-24.04' 
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - name: 'Setup Rust on Linux'
         if: matrix.platform == 'ubuntu-24.04' 
         uses: dtolnay/rust-toolchain@stable
