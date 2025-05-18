@@ -68,6 +68,7 @@ pub trait ApplyOperation: Operation {
 /// Some handlers might not support every operation or slices. For example, the
 /// direct handler doesn't support slices and the slice handler doesn't support
 /// mkdir and rmdir.
+#[allow(dead_code)]
 pub trait ApplyHandler {
     fn download_operation_path(&self) -> PathBuf;
     fn try_still_compatible(&mut self, path: &metadata::CleanPath, operation_idx: usize) -> bool;
