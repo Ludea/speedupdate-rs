@@ -55,8 +55,8 @@ jobs:
         if: matrix.platform == 'ubuntu-24.04' 
         run: cargo build --release --verbose --target x86_64-unknown-linux-musl
       - name: Build Macos and Windows binaries
-        if: matrix.platform != 'Ubuntu-24.04'
-        run: cargo build --release --verbose 
+        if: matrix.platform != 'ubuntu-24.04'
+        run: cargo build --release --verbose --target ${{ matrix.args }} 
       - name: Move macOS bin
         if: matrix.platform == 'macos-14'
         run: |
