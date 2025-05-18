@@ -40,7 +40,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Fmt
+      - name: fmt
         run: cargo fmt --all -- --check
       - name: Build Linux binaries
         if: matrix.platform == 'ubuntu-24.04' 
@@ -81,10 +81,10 @@ jobs:
     - run: git config --global --add safe.directory /__w/speedupdate-rs/speedupdate-rs 
     - name: Set outputs
       run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
-#      - name: Clippy
-#        run: cargo clippy --all-targets --all-features -- -D warnings
-#      - name: Fmt
-#        run: cargo fmt --all -- --check
+    - name: Clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+    - name: fmt
+      run: cargo fmt --all -- --check
     - name: Build and move aarch64 Linux binaries
       run: |
         cargo build --release --verbose
