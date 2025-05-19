@@ -57,7 +57,9 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           args="${{ matrix.args }}"
-          target=$(echo "$args" | awk '{print $2}') 
+          target=$(echo "$args" | awk '{print $2}')
+          arch="${target%%-*}"
+          echo "ARCH=$arch" >> $GITHUB_ENV 
            mv target/$target/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_$target
            mv target/$target/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_$target
       - name: Move Windows bin
@@ -73,7 +75,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform}}
+          name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform}}_$ARCH
           if-no-files-found: error
           path: |
             target/release/speedupdate-*
