@@ -56,15 +56,10 @@ jobs:
       - name: Move macOS bin
         if: matrix.platform == 'macos-latest'
         run: |
-          ls target
-          if [ -d target/aarch64-apple-darwin/release/speedupdate ]; then
-            mv target/aarch64-apple-darwin/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_darwin_aarch64
-            mv target/aarch64-apple-darwin/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_darwin_aarch64
-          fi;
-          if [ -d target/x86_64-apple-darwin/release/speedupdate ]; then
-            mv target/x86_64-apple-darwin/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_darwin_x86_64
-            mv target/x86_64-apple-darwin/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_darwin_x86_64
-          fi;
+          args="${{ matrix.args }}"
+          target=$(echo "$args" | awk '{print $2}') 
+           mv target/$target/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_$target
+           mv target/$target/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_$target
       - name: Move Windows bin
         if: matrix.platform == 'windows-latest'
         run: |
