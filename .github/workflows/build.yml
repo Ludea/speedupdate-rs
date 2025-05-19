@@ -56,7 +56,6 @@ jobs:
       - name: Move macOS bin
         if: matrix.platform == 'macos-latest'
         run: |
-          ls target/aarch64-apple-darwin
           if [ -d target/aarch64-apple-darwin ]; then
           mv target/aarch64-apple-darwin/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_darwin_aarch64
           mv target/aarch64-apple-darwin/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_darwin_aarch64
@@ -75,7 +74,6 @@ jobs:
         run: |
           mv target/x86_64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_x86_64
           mv target/x86_64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_x86_64
-      - run: ls target/release
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
