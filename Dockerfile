@@ -1,11 +1,12 @@
 FROM alpine:3.21
 ARG TARGETARCH
+ARG VERSION
 RUN apk upgrade
 
 WORKDIR /opt/speedupdate
 
-COPY speedupdate-$TARGETARCH/speedupdate /usr/local/bin/speedupdate
-COPY speedupdate-$TARGETARCH/speedupdateserver /usr/local/bin/speedupdateserver
+COPY speedupdate-$VERSION_linux_$TARGETARCH/speedupdate /usr/local/bin/speedupdate
+COPY speedupdate-$VERSION_linux_$TARGETARCH/speedupdateserver /usr/local/bin/speedupdateserver
 
 RUN chmod +x /usr/local/bin/speedupdateserver
 RUN chmod +x /usr/local/bin/speedupdate
