@@ -65,9 +65,9 @@ jobs:
           echo $target
           arch="${target%%-*}"
           echo $arch
-          echo "ARCH=$arch" >> $GITHUB_ENV 
-           mv target/$target/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_$target
-           mv target/$target/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_$target
+          echo "ARCH=_$arch" >> $GITHUB_ENV 
+           mv target/$target/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}$target
+           mv target/$target/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}$target
       - name: Move Windows bin
         if: matrix.platform == 'windows-latest'
         run: |
