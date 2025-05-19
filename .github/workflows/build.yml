@@ -45,6 +45,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - name: Get arch
+        run: |
+          args="${{ matrix.args }}"
+          target=$(echo "$args" | awk '{print $2}')
+          echo $target
+          arch="${target%%-*}"
+          echo $arch
+          echo "ARCH=_$arch" >> $GITHUB_ENV
       - name: 'Setup Rust on Linux'
         if: matrix.platform == 'ubuntu-latest' 
         uses: dtolnay/rust-toolchain@stable
@@ -60,12 +68,6 @@ jobs:
       - name: Move macOS bin
         if: matrix.platform == 'macos-latest'
         run: |
-          args="${{ matrix.args }}"
-          target=$(echo "$args" | awk '{print $2}')
-          echo $target
-          arch="${target%%-*}"
-          echo $arch
-          echo "ARCH=_$arch" >> $GITHUB_ENV 
            mv target/$target/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}$target
            mv target/$target/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}$target
       - name: Move Windows bin
