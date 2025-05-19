@@ -45,11 +45,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
-      - name: Get arch
+      - name: Get macos target and arch
+        if: matrix.platform == 'macos-latest' 
         run: |
           args="${{ matrix.args }}"
           target=$(echo "$args" | awk '{print $2}')
-          echo "MACOSTARGET=$target" >> $GITHUB_ENV
+          echo "MACOS_TARGET=$target" >> $GITHUB_ENV
           arch="${target%%-*}"
           echo "ARCH=_$arch" >> $GITHUB_ENV
       - name: 'Setup Rust on Linux'
@@ -67,8 +68,8 @@ jobs:
       - name: Move macOS bin
         if: matrix.platform == 'macos-latest'
         run: |
-           mv target/$target/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}$target
-           mv target/$target/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}$target
+           mv target/${{ MACOS_TARGET }}/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}${{ env.ARCH }}
+           mv target/${{ MACOS_TARGET }}/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}${{ env.ARCH }}
       - name: Move Windows bin
         if: matrix.platform == 'windows-latest'
         run: |
@@ -140,3 +141,5 @@ jobs:
           push: true
           tags: ludea/speedupdate:latest
           platforms: linux/amd64, linux/arm64
+          build-args: |
+            VERSION=${{ env.GITHUB_SHA_SHORT }} 
