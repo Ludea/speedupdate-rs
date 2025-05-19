@@ -56,7 +56,7 @@ jobs:
       - name: Move macOS bin
         if: matrix.platform == 'macos-latest'
         run: |
-          ls target
+          ls target/aarch64-apple-darwin
           if [ -d aarch64-apple-darwin ]; then
           mv target/aarch64-apple-darwin/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_darwin_aarch64
           mv target/aarch64-apple-darwin/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_darwin_aarch64
