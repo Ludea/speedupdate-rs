@@ -49,9 +49,8 @@ jobs:
         run: |
           args="${{ matrix.args }}"
           target=$(echo "$args" | awk '{print $2}')
-          echo $target
+          echo "MACOSTARGET=$target" >> $GITHUB_ENV
           arch="${target%%-*}"
-          echo $arch
           echo "ARCH=_$arch" >> $GITHUB_ENV
       - name: 'Setup Rust on Linux'
         if: matrix.platform == 'ubuntu-latest' 
