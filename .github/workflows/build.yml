@@ -57,11 +57,11 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           ls target
-          if [ -d target/aarch64-apple-darwin ]; then
+          if [ -e target/aarch64-apple-darwin ]; then
             mv target/aarch64-apple-darwin/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_darwin_aarch64
             mv target/aarch64-apple-darwin/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_darwin_aarch64
           fi;
-          if [ -d target/x86_64-apple-darwin ]; then
+          if [ -e target/x86_64-apple-darwin ]; then
             mv target/x86_64-apple-darwin/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_darwin_x86_64
             mv target/x86_64-apple-darwin/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_darwin_x86_64
           fi;
