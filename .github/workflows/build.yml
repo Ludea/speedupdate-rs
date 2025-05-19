@@ -56,18 +56,18 @@ jobs:
       - name: Move macOS bin
         if: matrix.platform == 'macos-latest'
         run: |
-          mv target/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
-          mv target/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
+          mv target/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_darwin_x86_64
+          mv target/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_darwin_x86_64
       - name: Move Windows bin
         if: matrix.platform == 'windows-latest'
         run: |
-          mv target/release/speedupdate.exe target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64.exe
-          mv target/release/speedupdateserver.exe target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64.exe
+          mv target/release/speedupdate.exe target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_windows_x86_64.exe
+          mv target/release/speedupdateserver.exe target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_windows_x86_64.exe
       - name: Move x86_64 Linux binaries
         if: matrix.platform == 'ubuntu-latest' 
         run: |
-          mv target/x86_64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
-          mv target/x86_64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform }}_x86_64
+          mv target/x86_64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_x86_64
+          mv target/x86_64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_x86_64
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
