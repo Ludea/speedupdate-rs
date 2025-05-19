@@ -75,7 +75,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform}}_$ARCH
+          name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_${{ matrix.platform}}_${{ env.ARG }} 
           if-no-files-found: error
           path: |
             target/release/speedupdate-*
