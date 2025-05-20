@@ -118,7 +118,7 @@ jobs:
 
   build-container:
     runs-on: ubuntu-22.04
-    needs: [build-aarch64-linux, build]
+    needs: [build-arm64-linux, build]
     steps:
       - uses: actions/checkout@v4
       - name: Set Github sha short
