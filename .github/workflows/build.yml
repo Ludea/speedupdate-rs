@@ -108,16 +108,16 @@ jobs:
     - name: Build and move aarch64 Linux binaries
       run: |
         cargo build --release --verbose
-        mv target/aarch64-unknown-linux-musl/release/speedupdate target/aarch64-unknown-linux-musl/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
-        mv target/aarch64-unknown-linux-musl/release/speedupdateserver target/aarch64-unknown-linux-musl/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
+        mv target/aarch64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
+        mv target/aarch64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
         if-no-files-found: error
         path: |
-          target/aarch64-unknown-linux-musl/release/speedupdate-*
-          target/aarch64-unknown-linux-musl/release/speedupdateserver-*
+          target/release/speedupdate-*
+          target/release/speedupdateserver-*
 
   build-container:
     runs-on: ubuntu-22.04
