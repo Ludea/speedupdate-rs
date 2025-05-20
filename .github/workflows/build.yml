@@ -55,7 +55,7 @@ jobs:
           echo "ARCH=_$arch" >> $GITHUB_ENV
       - name: Set Linux arch
         if: matrix.platform == 'ubuntu-latest'
-        run: echo "ARCH=amd64" >> $GITHUB_ENV
+        run: echo "ARCH=_amd64" >> $GITHUB_ENV
       - name: 'Setup Rust on Linux'
         if: matrix.platform == 'ubuntu-latest' 
         uses: dtolnay/rust-toolchain@stable
