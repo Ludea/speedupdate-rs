@@ -19,14 +19,18 @@ jobs:
         run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
       - name: Build
         run: cargo build --release
+      - name: Rename bin files
+        run: |
+          mv target/aarch64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
+          mv target/aarch64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
           if-no-files-found: error
           path: |
-            target/aarch64-unknown-linux-musl/release/speedupdateserver
-            target/aarch64-unknown-linux-musl/release/speedupdate
+            target/release/speedupdateserver-*
+            target/release/speedupdate-*
 
   build_x86_64:
     runs-on: ubuntu-latest
@@ -37,14 +41,18 @@ jobs:
         run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
       - name: Build
         run: cargo build --release
+      - name: Rename bin files
+        run: |
+          mv target/aarch64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_amd64
+          mv target/aarch64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_amd64
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_amd64
           if-no-files-found: error
           path: |
-            target/x86_64-unknown-linux-musl/release/speedupdateserver
-            target/x86_64-unknown-linux-musl/release/speedupdate
+            target/release/speedupdateserver-*
+            target/release/speedupdate-*
 
   build-container:
     runs-on: ubuntu-22.04
