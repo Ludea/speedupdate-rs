@@ -81,8 +81,8 @@ jobs:
       - name: Move x86_64 Linux binaries
         if: matrix.platform == 'ubuntu-latest' 
         run: |
-          mv target/x86_64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_x86_64
-          mv target/x86_64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_x86_64
+          mv target/x86_64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_amd64
+          mv target/x86_64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_amd64
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
