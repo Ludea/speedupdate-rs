@@ -21,7 +21,6 @@ jobs:
         run: cargo build --release
       - name: Rename bin files
         run: |
-          ls target/
           mv target/aarch64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
           mv target/aarch64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
       - name: Upload artifacts
@@ -44,8 +43,8 @@ jobs:
         run: cargo build --release
       - name: Rename bin files
         run: |
-          mv target/aarch64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_amd64
-          mv target/aarch64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_amd64
+          mv target/x86_64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_amd64
+          mv target/x86_64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_amd64
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
