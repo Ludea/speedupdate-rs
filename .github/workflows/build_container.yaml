@@ -15,12 +15,14 @@ jobs:
     container: messense/rust-musl-cross:aarch64-musl
     steps:
       - uses: actions/checkout@v4
+      - name: Set Github sha short  
+        run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
       - name: Build
         run: cargo build --release
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: speedupdate-arm64
+          name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
           if-no-files-found: error
           path: |
             target/aarch64-unknown-linux-musl/release/speedupdateserver
@@ -31,12 +33,14 @@ jobs:
     container: messense/rust-musl-cross:x86_64-musl
     steps:
       - uses: actions/checkout@v4
+      - name: Set Github sha short
+        run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
       - name: Build
         run: cargo build --release
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: speedupdate-amd64
+          name: speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_amd64
           if-no-files-found: error
           path: |
             target/x86_64-unknown-linux-musl/release/speedupdateserver
