@@ -51,6 +51,8 @@ jobs:
     needs: [build_aarch64, build_x86_64]
     steps:
       - uses: actions/checkout@v4
+      - name: Set Github sha short  
+        run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
       - uses: actions/download-artifact@v4
         with:
           pattern: speedupdate-*
