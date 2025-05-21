@@ -21,6 +21,7 @@ jobs:
         run: cargo build --release
       - name: Rename bin files
         run: |
+          ls target/
           mv target/aarch64-unknown-linux-musl/release/speedupdateserver target/release/speedupdateserver-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
           mv target/aarch64-unknown-linux-musl/release/speedupdate target/release/speedupdate-${{ env.GITHUB_SHA_SHORT }}_linux_arm64
       - name: Upload artifacts
