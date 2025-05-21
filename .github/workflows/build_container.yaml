@@ -81,3 +81,5 @@ jobs:
           push: true
           tags: ludea/speedupdate:latest
           platforms: linux/amd64, linux/arm64
+          build-args: |
+            VERSION=${{ env.GITHUB_SHA_SHORT }} 
