@@ -16,7 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set Github sha short  
-        run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
+        run: |
+          git config --global --add safe.directory /__w/speedupdate-rs/speedupdate-rs
+          echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
       - name: Build
         run: cargo build --release
       - name: Rename bin files
@@ -38,7 +40,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set Github sha short
-        run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
+        run: |
+          git config --global --add safe.directory /__w/speedupdate-rs/speedupdate-rs
+          echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
       - name: Build
         run: cargo build --release
       - name: Rename bin files
