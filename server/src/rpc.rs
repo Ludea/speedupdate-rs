@@ -34,7 +34,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::sync::CancellationToken;
 use tonic::{
     codec::CompressionEncoding,
-    service::{AxumRouter, Routes},
+    service::{AxumBody, AxumRouter, Routes},
     Request, Response, Status,
 };
 use tonic_web::GrpcWebLayer;
@@ -663,11 +663,16 @@ pub struct AuthMiddleware<S> {
 
 type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
-impl<S, ReqBody, ResBody> Service<http::Request<ReqBody>> for AuthMiddleware<S>
+impl<S, ResBody> Service<http::Request<AxumBody>> for AuthMiddleware<S>
 where
-    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>> + Clone + Send + 'static,
+    S: Service<
+            http::Request<AxumBody>,
+            Response = http::Response<ResBody>,
+            Error = Status,
+        > + Clone
+        + Send
+        + 'static,
     S::Future: Send + 'static,
-    ReqBody: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -677,68 +682,72 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {
+    fn call(&mut self, req: http::Request<axum::body::Body>) -> Self::Future {
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 
         Box::pin(async move {
-            //let (parts, body) = req.into_parts();
-            /*let encoded_pkcs8 = fs::read_to_string("pkey").unwrap();
-                        let decoded_pkcs8 = general_purpose::STANDARD.decode(encoded_pkcs8).unwrap();
-                        let rng = &rand::SystemRandom::new();
-                        let pair = EcdsaKeyPair::from_pkcs8(
-                            &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
-                            &decoded_pkcs8,
-                            rng,
-                        )
-                        .unwrap();
-                        let decoding_key = &DecodingKey::from_ec_der(pair.public_key().as_ref());
-            */
-            /* let content = body.collect().await.unwrap().to_bytes();
-                        let content_vec = content.to_vec();
-                        let content_string = String::from_utf8(content_vec).unwrap();
-                        let content_without_ascii: Vec<_> =
-                            content_string.chars().filter(|&c| !(c as u32 <= 0x001F)).collect();
-                        let content_string_without_ascii: String = content_without_ascii.into_iter().collect();
-                        let content_without_path = content_string_without_ascii
-                            .replace("/win64", "")
-                            .replace("/macos_arm64", "")
-                            .replace("/macos_x86_64", "")
-                            .replace("/linux", "");
-            */
-            // println!("content : {:?}", content_without_path);
+            let (parts, body) = req.into_parts();
+            let encoded_pkcs8 = fs::read_to_string("pkey").unwrap();
+            let decoded_pkcs8 = general_purpose::STANDARD.decode(encoded_pkcs8).unwrap();
+            let rng = &rand::SystemRandom::new();
+            let pair = EcdsaKeyPair::from_pkcs8(
+                &ring::signature::ECDSA_P256_SHA256_FIXED_SIGNING,
+                &decoded_pkcs8,
+                rng,
+            )
+            .unwrap();
+            let decoding_key = &DecodingKey::from_ec_der(pair.public_key().as_ref());
 
-            /* match parts.headers.get("authorization") {
-                            Some(t) => {
-                                let validation = &mut Validation::new(Algorithm::ES256);
-                                validation.validate_exp = false;
-                                let t_string = t.to_str().unwrap().replace("Bearer ", "");
-                                match decode::<Claims>(&t_string, decoding_key, validation) {
-                                    Ok(token_data) => {
-                                        // Compare body with scope
-                                        if token_data.claims.scope == content_without_path {
-                                            let body = BoxBody::new(
-                                                Full::new(content)
-                                                    .map_err(|err| Status::internal(err.to_string())),
-                                            );
-                                            let response =
-                                                inner.call(http::Request::from_parts(parts, body)).await?;
-                                            return Ok(response);
-                                        } else {
-                                            //return Err(Status::unauthenticated("Not allowed"));
-                                        }
-                                    }
-                                    Err(err) => {} //return Err(Status::unauthenticated(err.to_string())),
-                                }
+            let content = body
+                .collect()
+                .await
+                .map_err(|_err| {
+                    println!("error");
+                })
+                .unwrap()
+                .to_bytes();
+
+            let content_vec = content.to_vec();
+            let content_string = String::from_utf8(content_vec).unwrap();
+            let content_without_ascii: Vec<_> =
+                content_string.chars().filter(|&c| !(c as u32 <= 0x001F)).collect();
+            let content_string_without_ascii: String = content_without_ascii.into_iter().collect();
+            let content_without_path = content_string_without_ascii
+                .replace("/win64", "")
+                .replace("/macos_arm64", "")
+                .replace("/macos_x86_64", "")
+                .replace("/linux", "");
+
+            tracing::info!("content : {:?}", content_without_path);
+
+            match parts.headers.get("authorization") {
+                Some(t) => {
+                    let validation = &mut Validation::new(Algorithm::ES256);
+                    validation.validate_exp = false;
+                    let t_string = t.to_str().unwrap().replace("Bearer ", "");
+                    match decode::<Claims>(&t_string, decoding_key, validation) {
+                        Ok(token_data) => {
+                            // Compare body with scope
+                            if token_data.claims.scope == content_without_path {
+                                let body = AxumBody::from(content);
+                                let response = inner
+                                    .call(http::Request::from_parts(parts, body))
+                                    .await
+                                    .map_err(|_err| {
+                                        println!("error");
+                                    })
+                                    .unwrap();
+                                Ok(response)
+                            } else {
+                                Err(Status::unauthenticated("Not allowed"))
                             }
-                            None => {} //return Err(Status::unauthenticated("No token found")),
                         }
-            */
-            //          let body =
-            //            BoxBody::new(Full::new(content).map_err(|err| Status::internal(err.to_string())));
-            //let response = http::Response::from_parts(parts, body);
-            let response = inner.call(req).await?;
-            Ok(response)
+                        Err(err) => Err(Status::unauthenticated(err.to_string())),
+                    }
+                }
+                None => Err(Status::unauthenticated("No token found")),
+            }
         })
     }
 }
