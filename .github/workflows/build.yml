@@ -62,8 +62,8 @@ jobs:
         with: 
           targets: x86_64-unknown-linux-musl
       - uses: Swatinem/rust-cache@v2
-#      - name: Clippy
-#        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
       - name: fmt
         run: cargo fmt --all -- --check
       - name: Build binaries
@@ -101,8 +101,8 @@ jobs:
     - run: git config --global --add safe.directory /__w/speedupdate-rs/speedupdate-rs 
     - name: Set outputs
       run: echo "GITHUB_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV 
-#    - name: Clippy
-#      run: cargo clippy --all-targets --all-features -- -D warnings
+    - name: Clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
     - name: fmt
       run: cargo fmt --all -- --check
     - name: Build and move aarch64 Linux binaries
