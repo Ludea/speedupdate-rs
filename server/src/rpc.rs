@@ -668,7 +668,7 @@ where
     S: Service<
             http::Request<AxumBody>,
             Response = http::Response<ResBody>,
-            Error = Status,
+            //Error = Status,
         > + Clone
         + Send
         + 'static,
@@ -721,7 +721,7 @@ where
 
             tracing::info!("content : {:?}", content_without_path);
 
-            match parts.headers.get("authorization") {
+            /*match parts.headers.get("authorization") {
                 Some(t) => {
                     let validation = &mut Validation::new(Algorithm::ES256);
                     validation.validate_exp = false;
@@ -743,11 +743,21 @@ where
                                 Err(Status::unauthenticated("Not allowed"))
                             }
                         }
-                        Err(err) => Err(Status::unauthenticated(err.to_string())),
+                        Err(err) => {} //Err(Status::unauthenticated(err.to_string())),
                     }
                 }
-                None => Err(Status::unauthenticated("No token found")),
-            }
+                None => {} Err(Status::unauthenticated("No token found")),
+            }*/
+
+            let body = AxumBody::from(content);
+            let response = inner
+                .call(http::Request::from_parts(parts, body))
+                .await
+                .map_err(|_err| {
+                    println!("error");
+                })
+                .unwrap();
+            Ok(response)
         })
     }
 }
