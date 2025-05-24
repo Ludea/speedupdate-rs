@@ -663,13 +663,10 @@ pub struct AuthMiddleware<S> {
 
 type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
-impl<S, ResBody> Service<http::Request<AxumBody>> for AuthMiddleware<S>
+impl<S> Service<http::Request<AxumBody>> for AuthMiddleware<S>
 where
-    S: Service<
-            http::Request<AxumBody>,
-            Response = http::Response<ResBody>,
-            //Error = Status,
-        > + Clone
+    S: Service<http::Request<AxumBody>, Response = http::Response<AxumBody>>
+        + Clone
         + Send
         + 'static,
     S::Future: Send + 'static,
@@ -721,7 +718,7 @@ where
 
             tracing::info!("content : {:?}", content_without_path);
 
-            /*match parts.headers.get("authorization") {
+            match parts.headers.get("authorization") {
                 Some(t) => {
                     let validation = &mut Validation::new(Algorithm::ES256);
                     validation.validate_exp = false;
@@ -740,24 +737,14 @@ where
                                     .unwrap();
                                 Ok(response)
                             } else {
-                                Err(Status::unauthenticated("Not allowed"))
+                                Ok(Status::unauthenticated("Not allowed").into_http())
                             }
                         }
-                        Err(err) => {} //Err(Status::unauthenticated(err.to_string())),
+                        Err(err) => Ok(Status::unauthenticated(err.to_string()).into_http()),
                     }
                 }
-                None => {} Err(Status::unauthenticated("No token found")),
-            }*/
-
-            let body = AxumBody::from(content);
-            let response = inner
-                .call(http::Request::from_parts(parts, body))
-                .await
-                .map_err(|_err| {
-                    println!("error");
-                })
-                .unwrap();
-            Ok(response)
+                None => Ok(Status::unauthenticated("No token found").into_http()),
+            }
         })
     }
 }
