@@ -1,23 +1,19 @@
 use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Clone)]
 pub struct SharedBuildProgress {
-    state: Rc<RefCell<BuildProgress>>,
+    state: Arc<Mutex<BuildProgress>>,
 }
 
 impl SharedBuildProgress {
     pub(super) fn new(state: BuildProgress) -> Self {
-        Self { state: Rc::new(RefCell::new(state)) }
+        Self { state: Arc::new(Mutex::new(state)) }
     }
 
-    pub fn borrow(&self) -> Ref<'_, BuildProgress> {
-        self.state.borrow()
-    }
-
-    pub(super) fn borrow_mut(&self) -> RefMut<'_, BuildProgress> {
-        self.state.borrow_mut()
+    pub fn lock(&self) -> MutexGuard<'_, BuildProgress> {
+        self.state.lock().unwrap()
     }
 }
 

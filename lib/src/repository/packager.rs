@@ -72,7 +72,7 @@ impl fmt::Display for BuildError {
 impl std::error::Error for BuildError {}
 
 pub type BuildProgressStream<'a> =
-    Pin<Box<dyn Stream<Item = Result<SharedBuildProgress, BuildError>> + 'a>>;
+    Pin<Box<dyn Stream<Item = Result<SharedBuildProgress, BuildError>> + 'a + Send>>;
 
 impl PackageBuilder {
     pub fn new(
@@ -332,7 +332,7 @@ impl PackageBuilder {
             txs.push(tx);
             let progression = progression.clone();
             rxs.push(rx.map(move |(delta, progress)| {
-                let mut p = progression.borrow_mut();
+                let mut p = progression.lock();
                 p.processed_bytes += delta;
                 p.workers[thread_idx] = progress;
                 drop(p);
@@ -343,7 +343,7 @@ impl PackageBuilder {
         let rx_stream = stream::select_all(rxs);
         let w_stream = self.execute(txs).map(|_| stream::empty()).flatten_stream();
 
-        stream::select(rx_stream, w_stream).boxed_local()
+        stream::select(rx_stream, w_stream).boxed()
     }
 }
 
