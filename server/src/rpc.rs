@@ -708,7 +708,7 @@ where
             let content_vec = content.to_vec();
             let content_string = String::from_utf8(content_vec).unwrap();
             let content_without_ascii: Vec<_> =
-                content_string.chars().filter(|&c| !(c as u32 <= 0x001F)).collect();
+                content_string.chars().filter(|&c| !(c as u32 > 0x001F)).collect();
             let content_string_without_ascii: String = content_without_ascii.into_iter().collect();
             let content_without_path = content_string_without_ascii
                 .replace("/win64", "")
