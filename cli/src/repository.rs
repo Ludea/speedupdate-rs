@@ -324,7 +324,7 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
         "[{wide_bar:0.cyan/blue}] {bytes:>8}/{total_bytes:8} ({bytes_per_sec:>10}, {eta:4}) {msg:32}";
 
         let mut bars = state
-            .borrow()
+            .lock()
             .workers
             .iter()
             .enumerate()
@@ -343,7 +343,7 @@ pub async fn do_build_package(matches: &ArgMatches, repository: &mut Repository)
 
         let res = build_stream
             .try_for_each(|state| {
-                let state = state.borrow();
+                let state = state.lock();
                 for (worker, bar) in state.workers.iter().zip(bars.iter_mut()) {
                     bar.set_position(worker.processed_bytes);
                     bar.set_length(worker.process_bytes);

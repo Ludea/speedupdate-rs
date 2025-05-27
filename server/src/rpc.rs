@@ -472,18 +472,18 @@ impl Repo for RemoteRepository {
         }*/
 
         let mut build_stream = builder.build();
-        /* match build_stream.next().await {
+        match build_stream.next().await {
             Some(Ok(state)) => state,
             Some(Err(err)) => {
                 return Err(Status::internal(err.to_string()));
             }
             None => unreachable!(),
-        };*/
+        };
 
-        /*let res = build_stream.try_for_each(|_state| future::ready(Ok(()))).await;
+        let res = build_stream.try_for_each(|_state| future::ready(Ok(()))).await;
         if let Err(err) = res {
             return Err(Status::internal(err.to_string()));
-        }*/
+        }
 
         let reply = BuildOutput { downloaded_bytes_start: 0, downloaded_bytes_end: 0 };
         tokio::spawn(async move {
