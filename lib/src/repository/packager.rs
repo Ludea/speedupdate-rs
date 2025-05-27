@@ -200,6 +200,7 @@ impl PackageBuilder {
                         Ok((i, op))
                     })
                 })
+                .boxed()
                 .buffer_unordered(self.num_threads.get())
                 .map(|res| match res {
                     Ok(v) => v,
